@@ -20,6 +20,7 @@ import (
 	"workbuddy-ai-cliproxy/internal/models"
 	"workbuddy-ai-cliproxy/internal/usage"
 	"workbuddy-ai-cliproxy/pkg/version"
+	"workbuddy-ai-cliproxy/web"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,8 +34,10 @@ type Dispatcher struct {
 }
 
 type loginContext struct {
-	client  *http.Client
-	expires time.Time
+	client   *http.Client
+	expires  time.Time
+	realm    auth.Realm
+	provider string
 }
 
 var (
@@ -49,10 +52,12 @@ func GetDispatcher() *Dispatcher {
 		engine := gin.New()
 		engine.Use(gin.Recovery())
 
-		// 将管理路由挂载在根及 /v0/management/plugins/workbuddy 对应路径上
+		// 将管理路由挂载在根、CPA 官方规范及 workbuddyai 别名前缀上
 		management.MountRoutes(engine.Group(""))
 		management.MountRoutes(engine.Group("/v0/management/plugins/workbuddy"))
+		management.MountRoutes(engine.Group("/v0/management/plugins/workbuddyai"))
 		management.MountRoutes(engine.Group("/v0/resource/plugins/workbuddy"))
+		management.MountRoutes(engine.Group("/v0/resource/plugins/workbuddyai"))
 
 		jar, _ := cookiejar.New(nil)
 		client := &http.Client{
@@ -88,7 +93,8 @@ func (d *Dispatcher) HandleMethod(ctx context.Context, method string, requestByt
 		return d.handleModels()
 
 	case MethodAuthIdentifier, MethodExecutorIdentifier, MethodQuotaIdentifier:
-		return okEnvelope(IdentifierResponse{Identifier: "workbuddy"})
+		// 导出 workbuddyai，支持在 CPAMP 及 CPA 中展示为标准的 WorkBuddy AI OAuth Provider
+		return okEnvelope(IdentifierResponse{Identifier: "workbuddyai"})
 
 	case MethodAuthParse:
 		return d.handleAuthParse(requestBytes)
@@ -148,7 +154,7 @@ func (d *Dispatcher) handleRegister(reqBytes []byte) ([]byte, error) {
 	resp := Registration{
 		SchemaVersion: schemaVer,
 		Metadata: Metadata{
-			Name:             "workbuddy",
+			Name:             "WorkBuddy AI",
 			Version:          version.Version,
 			Author:           version.Author,
 			GitHubRepository: "https://github.com/lihongxu0221/workbuddy-ai-cliproxy",
@@ -190,7 +196,7 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 		result = append(result, ModelInfo{
 			ID:                         m.ID,
 			Object:                     "model",
-			OwnedBy:                    "workbuddy",
+			OwnedBy:                    "workbuddyai",
 			DisplayName:                m.DisplayName,
 			Name:                       m.ID,
 			SupportedGenerationMethods: []string{"chat"},
@@ -204,7 +210,7 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 			result = append(result, ModelInfo{
 				ID:                         "cn/" + m.ID,
 				Object:                     "model",
-				OwnedBy:                    "workbuddy",
+				OwnedBy:                    "workbuddyai",
 				DisplayName:                fmt.Sprintf("[CN] %s", m.DisplayName),
 				Name:                       "cn/" + m.ID,
 				SupportedGenerationMethods: []string{"chat"},
@@ -217,7 +223,7 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 			result = append(result, ModelInfo{
 				ID:                         "cb/" + m.ID,
 				Object:                     "model",
-				OwnedBy:                    "workbuddy",
+				OwnedBy:                    "workbuddyai",
 				DisplayName:                fmt.Sprintf("[Global] %s", m.DisplayName),
 				Name:                       "cb/" + m.ID,
 				SupportedGenerationMethods: []string{"chat"},
@@ -228,7 +234,7 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 			result = append(result, ModelInfo{
 				ID:                         "en/" + m.ID,
 				Object:                     "model",
-				OwnedBy:                    "workbuddy",
+				OwnedBy:                    "workbuddyai",
 				DisplayName:                fmt.Sprintf("[EN] %s", m.DisplayName),
 				Name:                       "en/" + m.ID,
 				SupportedGenerationMethods: []string{"chat"},
@@ -240,7 +246,7 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 	}
 
 	return okEnvelope(ModelResponse{
-		Provider: "workbuddy",
+		Provider: "workbuddyai",
 		Models:   result,
 	})
 }
@@ -299,7 +305,7 @@ func toAuthData(acc *auth.WorkBuddyAuth, fileName string) AuthData {
 	}
 
 	return AuthData{
-		Provider:         "workbuddy",
+		Provider:         "workbuddyai",
 		ID:               acc.ID,
 		FileName:         fileName,
 		Label:            label,
@@ -307,28 +313,54 @@ func toAuthData(acc *auth.WorkBuddyAuth, fileName string) AuthData {
 		ProxyURL:         acc.ProxyURL,
 		Disabled:         acc.Disabled,
 		StorageJSON:      storageJSON,
-		Metadata:         map[string]any{"type": "workbuddy", "realm": acc.Realm, "user_id": acc.UserID},
+		Metadata:         map[string]any{"type": "workbuddyai", "realm": acc.Realm, "user_id": acc.UserID},
 		Attributes:       map[string]string{"realm": string(acc.Realm)},
 		NextRefreshAfter: nextRefresh,
 	}
 }
 
 func (d *Dispatcher) handleAuthLoginStart(raw []byte) ([]byte, error) {
+	var req AuthLoginStartRequest
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &req)
+	}
+
 	jar, _ := cookiejar.New(nil)
 	loginClient := &http.Client{
 		Timeout: 20 * time.Second,
 		Jar:     jar,
 	}
 
-	endpoint := "https://copilot.tencent.com/v2/plugin/auth/state?platform=CLI"
+	isCN := false
+	if req.Provider == "workbuddy-cn" || req.Provider == "codebuddy" {
+		isCN = true
+	}
+	if req.Metadata != nil {
+		if r, ok := req.Metadata["realm"].(string); ok && strings.ToLower(r) == "cn" {
+			isCN = true
+		}
+	}
+
+	endpoint := "https://www.codebuddy.ai/v2/plugin/auth/state?platform=CLI"
+	origin := "https://www.codebuddy.ai"
+	providerID := "workbuddyai"
+	realm := auth.RealmGlobal
+
+	if isCN {
+		endpoint = "https://copilot.tencent.com/v2/plugin/auth/state?platform=CLI"
+		origin = "https://www.codebuddy.cn"
+		providerID = "workbuddy"
+		realm = auth.RealmCN
+	}
+
 	httpReq, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("User-Agent", "CLI/2.63.2 CodeBuddy/2.63.2")
-	httpReq.Header.Set("Origin", "https://www.codebuddy.cn")
-	httpReq.Header.Set("Referer", "https://www.codebuddy.cn/")
+	httpReq.Header.Set("Origin", origin)
+	httpReq.Header.Set("Referer", origin+"/")
 
 	resp, err := loginClient.Do(httpReq)
 	if err != nil {
@@ -355,12 +387,14 @@ func (d *Dispatcher) handleAuthLoginStart(raw []byte) ([]byte, error) {
 
 	ttl := 5 * time.Minute
 	d.loginStates.Store(env.Data.State, &loginContext{
-		client:  loginClient,
-		expires: time.Now().Add(ttl),
+		client:   loginClient,
+		expires:  time.Now().Add(ttl),
+		realm:    realm,
+		provider: providerID,
 	})
 
 	return okEnvelope(AuthLoginStartResponse{
-		Provider:  "workbuddy",
+		Provider:  providerID,
 		URL:       env.Data.AuthURL,
 		State:     env.Data.State,
 		ExpiresAt: time.Now().Add(ttl).UTC(),
@@ -388,19 +422,26 @@ func (d *Dispatcher) handleAuthLoginPoll(raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("login state expired")
 	}
 
-	tokenURL := fmt.Sprintf("https://copilot.tencent.com/v2/plugin/auth/token?state=%s", state)
+	baseURL := "https://www.codebuddy.ai"
+	origin := "https://www.codebuddy.ai"
+	if lc.realm == auth.RealmCN {
+		baseURL = "https://copilot.tencent.com"
+		origin = "https://www.codebuddy.cn"
+	}
+
+	tokenURL := fmt.Sprintf("%s/v2/plugin/auth/token?state=%s", baseURL, state)
 	httpReq, err := http.NewRequest(http.MethodGet, tokenURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set("User-Agent", "CLI/2.63.2 CodeBuddy/2.63.2")
-	httpReq.Header.Set("Origin", "https://www.codebuddy.cn")
-	httpReq.Header.Set("Referer", "https://www.codebuddy.cn/")
+	httpReq.Header.Set("Origin", origin)
+	httpReq.Header.Set("Referer", origin+"/")
 
 	resp, err := lc.client.Do(httpReq)
 	if err != nil {
 		return okEnvelope(AuthLoginPollResponse{
-			Provider: "workbuddy",
+			Provider: lc.provider,
 			Status:   "pending",
 			Message:  "waiting for login",
 		})
@@ -420,17 +461,18 @@ func (d *Dispatcher) handleAuthLoginPoll(raw []byte) ([]byte, error) {
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenEnv); err != nil || tokenEnv.Data.AccessToken == "" {
 		return okEnvelope(AuthLoginPollResponse{
-			Provider: "workbuddy",
+			Provider: lc.provider,
 			Status:   "pending",
 			Message:  "waiting for login confirmation",
 		})
 	}
 
 	// 拉取账号元数据
-	acctURL := fmt.Sprintf("https://copilot.tencent.com/v2/plugin/login/account?state=%s", state)
+	acctURL := fmt.Sprintf("%s/v2/plugin/login/account?state=%s", baseURL, state)
 	acctReq, _ := http.NewRequest(http.MethodGet, acctURL, nil)
 	acctReq.Header.Set("Authorization", "Bearer "+tokenEnv.Data.AccessToken)
 	acctReq.Header.Set("User-Agent", "CLI/2.63.2 CodeBuddy/2.63.2")
+	acctReq.Header.Set("Origin", origin)
 
 	var uid, nickname, enterpriseID string
 	if acctResp, errAcct := lc.client.Do(acctReq); errAcct == nil {
@@ -448,15 +490,15 @@ func (d *Dispatcher) handleAuthLoginPoll(raw []byte) ([]byte, error) {
 		enterpriseID = acctEnv.Data.EnterpriseID
 	}
 
-	accID := fmt.Sprintf("workbuddy-%s-cn", uid)
+	accID := fmt.Sprintf("workbuddy-%s-%s", uid, lc.realm)
 	if uid == "" {
-		accID = fmt.Sprintf("workbuddy-cn-%d", time.Now().Unix()%100000)
+		accID = fmt.Sprintf("workbuddy-%s-%d", lc.realm, time.Now().Unix()%100000)
 	}
 
 	acc := &auth.WorkBuddyAuth{
 		Type:         "workbuddy",
 		ID:           accID,
-		Realm:        auth.RealmCN,
+		Realm:        lc.realm,
 		AccessToken:  tokenEnv.Data.AccessToken,
 		RefreshToken: tokenEnv.Data.RefreshToken,
 		ExpiresAt:    time.Now().Unix() + tokenEnv.Data.ExpiresIn,
@@ -475,7 +517,7 @@ func (d *Dispatcher) handleAuthLoginPoll(raw []byte) ([]byte, error) {
 	d.loginStates.Delete(state)
 
 	return okEnvelope(AuthLoginPollResponse{
-		Provider: "workbuddy",
+		Provider: lc.provider,
 		Status:   "success",
 		Auth:     toAuthData(acc, fmt.Sprintf("%s.json", acc.ID)),
 	})
@@ -664,21 +706,44 @@ func (d *Dispatcher) handleExecutorExecuteStream(ctx context.Context, raw []byte
 // -----------------------------------------------------------------------------
 
 func (d *Dispatcher) handleManagementRegister() ([]byte, error) {
+	// 同时注册 /plugins/workbuddy 与 /plugins/workbuddyai 路由，无缝对接 CPA
 	routes := []ManagementRoute{
-		{Method: "GET", Path: "/accounts", Description: "获取所有账号及状态"},
-		{Method: "POST", Path: "/accounts/import", Description: "导入账号凭据"},
-		{Method: "POST", Path: "/accounts/refresh", Description: "刷新账号 Token 与余额"},
-		{Method: "DELETE", Path: "/accounts/:id", Description: "删除账号"},
-		{Method: "POST", Path: "/actions/dailybonus", Description: "触发国际区 30 积分打卡"},
-		{Method: "POST", Path: "/actions/checkin", Description: "触发国内区 100 积分签到"},
-		{Method: "POST", Path: "/actions/trial", Description: "激活国际区 250 积分 Expert 权益"},
-		{Method: "GET", Path: "/dailybonus/status", Description: "获取今日打卡热力图"},
-		{Method: "GET", Path: "/models", Description: "获取全部模型列表"},
-		{Method: "POST", Path: "/models/toggle", Description: "开关模型"},
-		{Method: "POST", Path: "/models/test", Description: "测试模型连通性与扣费"},
-		{Method: "GET", Path: "/stats", Description: "获取统计概览"},
-		{Method: "GET", Path: "/config", Description: "获取配置"},
-		{Method: "POST", Path: "/config", Description: "更新配置"},
+		{Method: "GET", Path: "/plugins/workbuddyai/accounts", Description: "获取所有账号及状态"},
+		{Method: "POST", Path: "/plugins/workbuddyai/accounts/import", Description: "导入账号凭据"},
+		{Method: "POST", Path: "/plugins/workbuddyai/accounts/refresh", Description: "刷新账号 Token 与余额"},
+		{Method: "DELETE", Path: "/plugins/workbuddyai/accounts/:id", Description: "删除账号"},
+		{Method: "POST", Path: "/plugins/workbuddyai/actions/dailybonus", Description: "触发国际区 30 积分打卡"},
+		{Method: "POST", Path: "/plugins/workbuddyai/actions/checkin", Description: "触发国内区 100 积分签到"},
+		{Method: "POST", Path: "/plugins/workbuddyai/actions/trial", Description: "激活国际区 250 积分 Expert 权益"},
+		{Method: "GET", Path: "/plugins/workbuddyai/dailybonus/status", Description: "获取今日打卡热力图"},
+		{Method: "POST", Path: "/plugins/workbuddyai/actions/login-start", Description: "启动扫码或OAuth登录"},
+		{Method: "GET", Path: "/plugins/workbuddyai/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "POST", Path: "/plugins/workbuddyai/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "GET", Path: "/plugins/workbuddyai/models", Description: "获取全部模型列表"},
+		{Method: "POST", Path: "/plugins/workbuddyai/models/toggle", Description: "开关模型"},
+		{Method: "POST", Path: "/plugins/workbuddyai/models/test", Description: "测试模型连通性与扣费"},
+		{Method: "GET", Path: "/plugins/workbuddyai/stats", Description: "获取统计概览"},
+		{Method: "GET", Path: "/plugins/workbuddyai/config", Description: "获取配置"},
+		{Method: "POST", Path: "/plugins/workbuddyai/config", Description: "更新配置"},
+
+		// workbuddy 别名兼容
+		{Method: "GET", Path: "/plugins/workbuddy/accounts", Description: "获取所有账号及状态"},
+		{Method: "POST", Path: "/plugins/workbuddy/accounts/import", Description: "导入账号凭据"},
+		{Method: "POST", Path: "/plugins/workbuddy/accounts/refresh", Description: "刷新账号 Token 与余额"},
+		{Method: "DELETE", Path: "/plugins/workbuddy/accounts/:id", Description: "删除账号"},
+		{Method: "POST", Path: "/plugins/workbuddy/actions/dailybonus", Description: "触发国际区 30 积分打卡"},
+		{Method: "POST", Path: "/plugins/workbuddy/actions/checkin", Description: "触发国内区 100 积分签到"},
+		{Method: "POST", Path: "/plugins/workbuddy/actions/trial", Description: "激活国际区 250 积分 Expert 权益"},
+		{Method: "GET", Path: "/plugins/workbuddy/dailybonus/status", Description: "获取今日打卡热力图"},
+		{Method: "POST", Path: "/plugins/workbuddy/actions/login-start", Description: "启动扫码或OAuth登录"},
+		{Method: "GET", Path: "/plugins/workbuddy/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "POST", Path: "/plugins/workbuddy/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "GET", Path: "/plugins/workbuddy/models", Description: "获取全部模型列表"},
+		{Method: "POST", Path: "/plugins/workbuddy/models/toggle", Description: "开关模型"},
+		{Method: "POST", Path: "/plugins/workbuddy/models/test", Description: "测试模型连通性与扣费"},
+		{Method: "GET", Path: "/plugins/workbuddy/stats", Description: "获取统计概览"},
+		{Method: "GET", Path: "/plugins/workbuddy/config", Description: "获取配置"},
+		{Method: "POST", Path: "/plugins/workbuddy/config", Description: "更新配置"},
 	}
 
 	resources := []ResourceRoute{
@@ -701,11 +766,27 @@ func (d *Dispatcher) handleManagementHandle(raw []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	// 构建 http.Request 派发给 Gin 引擎
-	targetPath := req.Path
-	if targetPath == "" {
-		targetPath = "/ui/"
+	path := strings.TrimSpace(req.Path)
+
+	// 核心修复：如果是 Web 控制台页面请求，直接返回无外部引用的自包含 HTML，彻底避免 301 重定向与路径错位
+	if path == "" ||
+		strings.HasSuffix(path, "/ui") ||
+		strings.HasSuffix(path, "/ui/") ||
+		strings.HasSuffix(path, "/index.html") ||
+		path == "/v0/resource/plugins/workbuddy/ui" ||
+		path == "/v0/resource/plugins/workbuddyai/ui" {
+		return okEnvelope(ManagementResponse{
+			StatusCode: http.StatusOK,
+			Headers: http.Header{
+				"Content-Type":  []string{"text/html; charset=utf-8"},
+				"Cache-Control": []string{"no-cache, no-store, must-revalidate"},
+			},
+			Body: web.RenderFullHTML(),
+		})
 	}
+
+	// 针对 API 请求构建 http.Request 派发给 Gin 引擎
+	targetPath := path
 	if req.Query != nil && len(req.Query) > 0 {
 		targetPath += "?" + req.Query.Encode()
 	}
@@ -732,7 +813,7 @@ func (d *Dispatcher) handleManagementHandle(raw []byte) ([]byte, error) {
 
 func (d *Dispatcher) handleQuotaDescribe() ([]byte, error) {
 	return okEnvelope(QuotaDescribeResponse{
-		SupportedProviders: []string{"workbuddy", "workbuddyai", "codebuddy"},
+		SupportedProviders: []string{"workbuddyai", "workbuddy", "codebuddy"},
 		DisplayName:        "WorkBuddy AI / CodeBuddy",
 		SupportsReset:      false,
 	})
@@ -769,7 +850,7 @@ func (d *Dispatcher) handleQuotaFetch(ctx context.Context, raw []byte) ([]byte, 
 	}
 
 	return okEnvelope(QuotaFetchResponse{
-		Provider:       "workbuddy",
+		Provider:       "workbuddyai",
 		RemainingQuota: credits,
 		TotalQuota:     1000.0,
 		IsUnlimited:    false,

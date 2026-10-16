@@ -23,11 +23,22 @@ func MountRoutes(group *gin.RouterGroup) {
 		c.Next()
 	})
 
-	// 1. 静态资产与前端 UI 挂载
-	group.StaticFS("/ui", http.FS(web.StaticFS))
-	group.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusFound, c.Request.URL.Path+"/ui/")
-	})
+	// 1. 静态资产与前端 UI 直接返回自包含 HTML，彻底杜绝 301 重定向与资源丢失
+	renderUI := func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Data(http.StatusOK, "text/html; charset=utf-8", web.RenderFullHTML())
+	}
+
+	if group.BasePath() == "" || group.BasePath() == "/" {
+		group.GET("/", renderUI)
+	} else {
+		group.GET("", renderUI)
+		group.GET("/", renderUI)
+	}
+	group.GET("/ui", renderUI)
+	group.GET("/ui/", renderUI)
+	group.StaticFS("/ui/static", http.FS(web.StaticFS))
 
 	// 2. 账号体系 API
 	group.GET("/accounts", HandleListAccounts)
@@ -40,6 +51,9 @@ func MountRoutes(group *gin.RouterGroup) {
 	group.POST("/actions/checkin", HandleCheckinManual)
 	group.POST("/actions/trial", HandleActivateTrial)
 	group.GET("/dailybonus/status", HandleDailyBonusStatus)
+	group.POST("/actions/login-start", HandleLoginStart)
+	group.GET("/actions/login-poll", HandleLoginPoll)
+	group.POST("/actions/login-poll", HandleLoginPoll)
 
 	// 4. 模型管理 API
 	group.GET("/models", HandleListModels)

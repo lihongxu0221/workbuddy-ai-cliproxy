@@ -3,6 +3,7 @@ package cpa
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"workbuddy-ai-cliproxy/internal/auth"
 )
@@ -69,8 +70,8 @@ func TestModelStaticAndPrefixes(t *testing.T) {
 	var resp ModelResponse
 	_ = json.Unmarshal(env.Result, &resp)
 
-	if resp.Provider != "workbuddy" {
-		t.Errorf("expected provider 'workbuddy', got %s", resp.Provider)
+	if resp.Provider != "workbuddyai" {
+		t.Errorf("expected provider 'workbuddyai', got %s", resp.Provider)
 	}
 
 	modelMap := make(map[string]ModelInfo)
@@ -237,6 +238,48 @@ func TestManagementRegisterAndHandle(t *testing.T) {
 
 	if mgmtResp.StatusCode != 200 {
 		t.Errorf("expected status 200 from /models, got %d", mgmtResp.StatusCode)
+	}
+
+	// 3. 核心断言：测试 /v0/resource/plugins/workbuddy/ui 请求直接返回 200 状态与自包含 HTML，杜绝 301 重定向
+	uiPaths := []string{
+		"/v0/resource/plugins/workbuddy/ui",
+		"/v0/resource/plugins/workbuddyai/ui",
+		"/ui",
+	}
+
+	for _, p := range uiPaths {
+		uiReq := ManagementRequest{
+			Method: "GET",
+			Path:   p,
+		}
+		uiReqBytes, _ := json.Marshal(uiReq)
+		uiRespBytes, err := dispatcher.HandleMethod(context.Background(), MethodManagementHandle, uiReqBytes, nil)
+		if err != nil {
+			t.Fatalf("management handle ui (%s) failed: %v", p, err)
+		}
+
+		var envUI Envelope
+		_ = json.Unmarshal(uiRespBytes, &envUI)
+		var uiResp ManagementResponse
+		_ = json.Unmarshal(envUI.Result, &uiResp)
+
+		if uiResp.StatusCode != 200 {
+			t.Errorf("path %s: expected status 200, got %d", p, uiResp.StatusCode)
+		}
+		contentType := uiResp.Headers.Get("Content-Type")
+		if contentType != "text/html; charset=utf-8" {
+			t.Errorf("path %s: expected html content type, got %s", p, contentType)
+		}
+		bodyStr := string(uiResp.Body)
+		if !strings.Contains(bodyStr, "WorkBuddy AI 控制台") {
+			t.Errorf("path %s: expected HTML body to contain title", p)
+		}
+		if !strings.Contains(bodyStr, "<style>") || !strings.Contains(bodyStr, "<script>") {
+			t.Errorf("path %s: expected embedded <style> and <script> tags", p)
+		}
+		if strings.Contains(bodyStr, "Moved Permanently") {
+			t.Errorf("path %s: MUST NOT contain Moved Permanently redirect link", p)
+		}
 	}
 }
 

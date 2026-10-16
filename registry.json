@@ -2,17 +2,18 @@
   "schema_version": 1,
   "plugins": [
     {
-      "id": "workbuddy",
+      "id": "workbuddyai",
       "name": "WorkBuddy AI Proxy Plugin",
-      "description": "Enterprise-grade CLIProxyAPI provider plugin for Tencent WorkBuddy / CodeBuddy (CN & Global realms). Features automated daily 30-credit reward (Global) and 100-credit check-in (CN), admission gate (max 2 slots/account), soft session affinity for prompt cache hotness, in-plugin 429/14018 failover, dynamic model manager, and embedded Web UI.",
+      "description": "Enterprise-grade CLIProxyAPI provider plugin for WorkBuddy AI (codebuddy.ai) & Tencent CodeBuddy (copilot.tencent.com). Features automated daily 30-credit reward (Global) and 100-credit check-in (CN), admission gate (max 2 slots/account), soft session affinity for prompt cache hotness, in-plugin 429/14018 failover, dynamic model manager, and embedded Web UI.",
       "author": "workbuddy-ai-team",
       "version": "1.0.0",
-      "repository": "https://github.com/workbuddy-ai/workbuddy-ai-cliproxy",
-      "homepage": "https://github.com/workbuddy-ai/workbuddy-ai-cliproxy",
+      "repository": "https://github.com/lihongxu0221/workbuddy-ai-cliproxy",
+      "homepage": "https://github.com/lihongxu0221/workbuddy-ai-cliproxy",
       "license": "MIT",
       "tags": [
         "Provider",
         "OAuth",
+        "WorkBuddyAI",
         "WorkBuddy",
         "CodeBuddy",
         "Tencent",
@@ -22,6 +23,22 @@
         "Failover",
         "Quota",
         "Management"
+      ]
+    },
+    {
+      "id": "workbuddy",
+      "name": "WorkBuddy Proxy Plugin (Alias)",
+      "description": "Compatibility alias for WorkBuddy AI Proxy Plugin supporting legacy provider ID.",
+      "author": "workbuddy-ai-team",
+      "version": "1.0.0",
+      "repository": "https://github.com/lihongxu0221/workbuddy-ai-cliproxy",
+      "homepage": "https://github.com/lihongxu0221/workbuddy-ai-cliproxy",
+      "license": "MIT",
+      "tags": [
+        "Provider",
+        "OAuth",
+        "WorkBuddy",
+        "CodeBuddy"
       ]
     }
   ]

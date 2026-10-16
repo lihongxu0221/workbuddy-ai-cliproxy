@@ -1,6 +1,14 @@
-const API_BASE = window.location.pathname.replace(/\/ui\/?$/, "");
+function getApiBase() {
+  const p = window.location.pathname;
+  if (p.includes('/v0/resource/plugins/')) {
+    return p.replace('/v0/resource/plugins/', '/v0/management/plugins/').replace(/\/ui\/?$/, '');
+  }
+  return p.replace(/\/ui\/?$/, '');
+}
 
+const API_BASE = getApiBase();
 let currentTab = "accounts";
+let pollTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
@@ -22,6 +30,20 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("modal-import").classList.remove("active");
   });
 
+  document.getElementById("btn-open-login").addEventListener("click", () => {
+    document.getElementById("modal-login").classList.add("active");
+  });
+
+  document.getElementById("btn-close-login").addEventListener("click", () => {
+    document.getElementById("modal-login").classList.remove("active");
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  });
+
+  document.getElementById("btn-start-login").addEventListener("click", handleStartLogin);
+  document.getElementById("btn-copy-auth-link").addEventListener("click", handleCopyLink);
   document.getElementById("form-import").addEventListener("submit", handleImportSubmit);
 });
 
@@ -54,14 +76,14 @@ async function loadStats() {
 
 async function loadAccounts() {
   const tbody = document.getElementById("accounts-tbody");
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">Loading accounts...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading accounts...</td></tr>`;
 
   try {
     const res = await fetch(`${API_BASE}/accounts`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
       if (json.data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">No accounts found in auths/. Click "Import Account" to add.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No accounts found in auths/. Click "扫码 / OAuth 登录" to add.</td></tr>`;
         return;
       }
       tbody.innerHTML = "";
@@ -101,7 +123,7 @@ async function loadAccounts() {
       });
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger)">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -231,4 +253,79 @@ async function handleImportSubmit(e) {
   } catch (err) {
     alert("Import failed: " + err.message);
   }
+}
+
+let activeAuthURL = "";
+
+async function handleStartLogin() {
+  const realm = document.getElementById("login-realm").value;
+  const btn = document.getElementById("btn-start-login");
+  btn.disabled = true;
+  btn.innerText = "正在获取链接...";
+
+  try {
+    const res = await fetch(`${API_BASE}/actions/login-start?realm=${realm}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ realm })
+    });
+    const json = await res.json();
+    btn.disabled = false;
+    btn.innerText = "⚡ 获取授权链接";
+
+    if (json.code === 0 && json.data) {
+      const { state, authUrl } = json.data;
+      activeAuthURL = authUrl;
+
+      document.getElementById("login-active-box").style.display = "block";
+      document.getElementById("login-auth-link").href = authUrl;
+      document.getElementById("login-status-label").innerText = "等待授权中，请在打开的页面中完成登录...";
+      document.getElementById("login-indicator").style.background = "var(--warning)";
+
+      // 自动新窗口打开
+      window.open(authUrl, "_blank");
+
+      // 启动轮询
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(async () => {
+        try {
+          const pollRes = await fetch(`${API_BASE}/actions/login-poll?state=${encodeURIComponent(state)}`);
+          const pollJson = await pollRes.json();
+          if (pollJson.status === "success") {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            document.getElementById("login-status-label").innerText = "✅ 登录成功！账号已成功加入账号池。";
+            document.getElementById("login-indicator").style.background = "var(--success)";
+            setTimeout(() => {
+              document.getElementById("modal-login").classList.remove("active");
+              document.getElementById("login-active-box").style.display = "none";
+              loadAccounts();
+            }, 1500);
+          } else if (pollJson.status === "error") {
+            clearInterval(pollTimer);
+            pollTimer = null;
+            document.getElementById("login-status-label").innerText = "❌ 登录失败: " + (pollJson.error || pollJson.message);
+            document.getElementById("login-indicator").style.background = "var(--danger)";
+          }
+        } catch (err) {
+          console.warn("poll error:", err);
+        }
+      }, 2000);
+    } else {
+      alert("获取授权失败: " + (json.error || json.message));
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerText = "⚡ 获取授权链接";
+    alert("请求错误: " + err.message);
+  }
+}
+
+function handleCopyLink() {
+  if (!activeAuthURL) return;
+  navigator.clipboard.writeText(activeAuthURL).then(() => {
+    alert("授权链接已复制到剪贴板！");
+  }).catch(() => {
+    prompt("请手动复制授权链接：", activeAuthURL);
+  });
 }

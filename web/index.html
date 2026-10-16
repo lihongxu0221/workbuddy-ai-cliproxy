@@ -13,12 +13,13 @@
         <div class="logo-icon">WB</div>
         <div>
           <h1>WorkBuddy AI 控制台</h1>
-          <p style="color:var(--text-muted);font-size:12px">CLIProxyAPI 企业级高可用代理插件</p>
+          <p style="color:var(--text-muted);font-size:12px">CLIProxyAPI 企业级双区多账号高可用代理插件</p>
         </div>
       </div>
       <div class="header-actions">
         <button id="btn-refresh-all" class="btn-secondary">🔄 刷新数据</button>
-        <button id="btn-open-import" class="btn-primary">➕ 导入账号</button>
+        <button id="btn-open-login" class="btn-primary">⚡ 扫码 / OAuth 登录</button>
+        <button id="btn-open-import" class="btn-secondary">➕ 导入 Token</button>
       </div>
     </header>
 
@@ -103,12 +104,45 @@
           参数已从 <code>config.yaml</code> 加载并生效。
         </p>
         <ul style="color:var(--text-muted);font-size:13px;line-height:1.8;padding-left:20px">
+          <li><strong>CPA 接口兼容</strong>：全兼容 CPA v6 / v7 / v8，支持标准 C ABI 与独立 CLI 代理</li>
           <li><strong>国际区每日 30 积分打卡</strong>：已启用 (08:00/12:00/16:00/20:00 4-Tick)</li>
           <li><strong>国内区每日 100 积分签到</strong>：已启用 (09:00/21:00 2-Tick)</li>
           <li><strong>单账号并发准入控制</strong>：最大 2 槽位 (防封控)</li>
           <li><strong>软会话粘性 (Affinity)</strong>：已开启 (持续保护 Prompt Cache)</li>
-          <li><strong>路由前缀</strong>：国内区 <code>cn/</code>，国际区 <code>cb/</code></li>
+          <li><strong>路由前缀</strong>：国内区 <code>cn/</code>，国际区 <code>cb/</code>、<code>en/</code>、<code>wb/</code></li>
         </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 扫码 / OAuth 登录 Modal -->
+  <div class="modal" id="modal-login">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>WorkBuddy 授权登录</h3>
+        <button id="btn-close-login" style="background:none;color:var(--text-muted);font-size:18px">✕</button>
+      </div>
+      <div class="form-group">
+        <label>选择登录区域与服务</label>
+        <select id="login-realm">
+          <option value="global">国际区 WorkBuddy AI (codebuddy.ai / Google / GitHub / 邮箱)</option>
+          <option value="cn">国内区 CodeBuddy (copilot.tencent.com / 微信 / 手机扫码)</option>
+        </select>
+      </div>
+      <div style="margin-top:12px;margin-bottom:16px">
+        <button id="btn-start-login" class="btn-primary" style="width:100%;justify-content:center">⚡ 获取授权链接</button>
+      </div>
+
+      <div id="login-active-box" style="display:none;background:var(--bg-primary);padding:14px;border-radius:6px;border:1px solid var(--border-color)">
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:8px">授权链接已生成，请在新标签页中完成认证：</p>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <a id="login-auth-link" href="#" target="_blank" class="btn-primary" style="text-decoration:none;font-size:12px;padding:6px 12px">🌐 打开登录页</a>
+          <button id="btn-copy-auth-link" class="btn-secondary btn-sm">复制链接</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--warning)" id="login-indicator"></span>
+          <span id="login-status-label" style="font-size:12px;color:var(--text-muted)">正在等待扫码 / 授权确认中...</span>
+        </div>
       </div>
     </div>
   </div>
