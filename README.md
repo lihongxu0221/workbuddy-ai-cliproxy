@@ -1,0 +1,179 @@
+# WorkBuddy AI CLIProxyAPI Plugin Solution (workbuddy-ai-cliproxy)
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8.svg)](https://golang.org)
+[![CLIProxyAPI Compatibility](https://img.shields.io/badge/CLIProxyAPI-v6%20%7C%20v7-success.svg)](https://github.com/router-for-me/CLIProxyAPI)
+
+> **Enterprise-grade high-availability proxy plugin integrating Tencent WorkBuddy / CodeBuddy (CN & Global realms) into CLIProxyAPI (CPA).**
+>
+> Transforms WorkBuddy multi-account pools into standard **OpenAI Chat Completions**, **Anthropic Claude Messages**, and **Google Gemini GenerateContent** endpoints, seamlessly powering Cursor, VS Code Copilot, Claude Code, Windsurf, Cline, Roo Code, and more.
+
+---
+
+## Table of Contents
+- [Key Highlights](#key-highlights)
+- [System Architecture](#system-architecture)
+- [Supported Models](#supported-models)
+- [Dual Realm & Credential Specs](#dual-realm--credential-specs)
+- [Core Engineering Mechanisms](#core-engineering-mechanisms)
+  - [1. Global 30-Credit Daily Reward & CN Check-in](#1-global-30-credit-daily-reward--cn-check-in)
+  - [2. In-Plugin Resilient Failover](#2-in-plugin-resilient-failover)
+  - [3. Per-Account Concurrency Admission Gate](#3-per-account-concurrency-admission-gate)
+  - [4. Soft Session Affinity & Prompt Cache Protection](#4-soft-session-affinity--prompt-cache-protection)
+  - [5. Dynamic Model Manager & Realm Routing](#5-dynamic-model-manager--realm-routing)
+- [Quick Start](#quick-start)
+  - [1. Build Shared Library](#1-build-shared-library)
+  - [2. Install into CLIProxyAPI](#2-install-into-cliproxyapi)
+  - [3. Configuration](#3-configuration)
+  - [4. Client Integration](#4-client-integration)
+- [Embedded Management Web Console](#embedded-management-web-console)
+- [License](#license)
+
+---
+
+## Key Highlights
+
+1. **Native Dual-Realm Integration (CN + Global)**:
+   - Detects whether an account belongs to CN (`copilot.tencent.com` / `workbuddy.cn`) or Global (`workbuddy.ai` / `codebuddy.ai`), preventing unauthorized 401 redirect crashes on international credentials.
+   - Dedicated model prefixes (`cn/` vs `cb/` or `wb/`) ensure clean routing without naming collisions.
+2. **Zero-Touch Daily Credit Harvest Engine**:
+   - **Global Realm**: Automates daily report submission via `POST /v2/report` with `eventCode: "chat_request_send"`. Verified next-day delivery of **30 credits/day per account** (`Bonus Pack`, 30-day validity), plus consecutive streak tiers (+50 credits at 14d, +150 credits at 28d) and one-click 250-credit Expert trial.
+   - **CN Realm**: Automated daily check-in delivering **100 credits/day + 500 credits/month**.
+   - Idempotent heatmap detection with 4-tick spaced scheduler (`08:00`, `12:00`, `16:00`, `20:00`).
+3. **In-Plugin Resilient Failover**:
+   - Overcomes CPA C-shared library isolation by implementing an internal multi-account retry pipeline.
+   - Transparently handles **HTTP 429**, **HTTP 402 / code 14018 (Credits exhausted)**, and **code 6004** errors by rotating to healthy accounts in the same realm without dropping client streams.
+4. **Anti-Abuse Admission Control & Prompt Cache Affinity**:
+   - Enforces a hard **maximum 2 in-flight requests per account** admission gate, preventing sudden bursts from triggering account bans.
+   - **Soft Session Affinity** binds client conversations to specific accounts, maintaining high upstream Prompt Cache hit rates (reducing token billing by up to 90%) while degrading gracefully when congested.
+5. **Full Bidirectional Protocol Translation**:
+   - Supports standard OpenAI format, Anthropic Claude format (including thinking tokens), and Google Gemini format.
+   - Robust Function Calling / Tool Use handling and multimodal payload translation.
+6. **Privacy-Preserving Usage Auditing**:
+   - Emits structured JSONL audit logs containing token counts, upstream credit billing, latency, and model names with zero credential or prompt content leakage.
+
+---
+
+## System Architecture
+
+```
+Client (Cursor / VSCode / Claude Code)
+                 │  OpenAI / Claude / Gemini APIs
+                 ▼
+     CLIProxyAPI Host Core (:8317)
+                 │  C-Shared ABI (.dll / .so / .dylib)
+                 ▼
+╔══════════════════════════════════════════════════════════╗
+║             WorkBuddy AI Proxy Plugin                    ║
+║                                                          ║
+║   ┌────────────────────┐   ┌─────────────────────────┐   ║
+║   │  Model Registry    │   │ Protocol Translators    │   ║
+║   │  & Realm Router    │   │ (OpenAI, Claude, Gemini)│   ║
+║   └────────────────────┘   └─────────────────────────┘   ║
+║                                                          ║
+║   ┌────────────────────┐   ┌─────────────────────────┐   ║
+║   │ Admission Gate     │   │ Soft Session Affinity   │   ║
+║   │ (Max 2 Slots/Acc)  │   │ (Prompt Cache Hotness)  │   ║
+║   └────────────────────┘   └─────────────────────────┘   ║
+║                                                          ║
+║   ┌──────────────────────────────────────────────────┐   ║
+║   │ In-Plugin Failover & Quarantine Manager          │   ║
+║   │ (429 Backoff, 14018 Quota Exhaustion, 6004 Retry)│   ║
+║   └──────────────────────────────────────────────────┘   ║
+║                                                          ║
+║   ┌────────────────────┐   ┌─────────────────────────┐   ║
+║   │ Growth Scheduler   │   │ Usage Audit Ledger      │   ║
+║   │ (30 Cr/d Global,   │   │ (JSONL Credit & Tokens) │   ║
+║   │  100 Cr/d CN)      │   │                         │   ║
+║   └────────────────────┘   └─────────────────────────┘   ║
+║                                                          ║
+║   ┌──────────────────────────────────────────────────┐   ║
+║   │ Embedded Web Dashboard (/v0/management/plugins)  │   ║
+║   └──────────────────────────────────────────────────┘   ║
+╚══════════════════════════════════════════════════════════╝
+                 │                     │
+          CN Gateway             Global Gateway
+       copilot.tencent.com         workbuddy.ai
+```
+
+---
+
+## Supported Models
+
+Upstream models are dynamically queried from `/v2/enterprises/personal/models` and `/v3/config`:
+
+- **OpenAI Family**: `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6-luna` (Global realm)
+- **Anthropic Family**: `claude-fable-5-1`, `claude-opus-5-5`, `claude-sonnet-5-5` (Global realm)
+- **Google Family**: `gemini-3.8-flash` (Global realm)
+- **DeepSeek Family**: `deepseek-v4`, `deepseek-v3`, `deepseek-r1` (CN & Global realms)
+- **Tencent Family**: `hunyuan-turbo`, `hunyuan-pro` (CN realm)
+- **Zhipu Family**: `glm-5.3` (CN realm)
+
+---
+
+## Dual Realm & Credential Specs
+
+Place credentials in CLIProxyAPI's `auths/` folder as `workbuddy-<uid>-<realm>.json`:
+
+```json
+{
+  "type": "workbuddy",
+  "id": "workbuddy-user-intl-01",
+  "realm": "global",
+  "access_token": "eyJhbGciOi...",
+  "refresh_token": "eyJhbGciOi...",
+  "expires_at": 1740000000,
+  "user_id": "10086",
+  "email": "user@example.com",
+  "nickname": "WorkBuddy-Intl",
+  "credits": 280.0,
+  "disabled": false
+}
+```
+
+---
+
+## Quick Start
+
+### 1. Build Shared Library
+
+```bash
+# Windows (outputs bin/workbuddy.dll)
+./build.bat
+
+# Linux / macOS (outputs bin/workbuddy.so or bin/workbuddy.dylib)
+make build
+```
+
+### 2. Install into CLIProxyAPI
+
+Copy the compiled library to the `plugins/` directory:
+```bash
+cp bin/workbuddy.dll /path/to/cliproxyapi/plugins/
+```
+
+### 3. Configuration
+
+Add the plugin stanza in `config.yaml`:
+
+```yaml
+plugins:
+  enabled: true
+  configs:
+    workbuddy:
+      daily_bonus: true
+      checkin_auto: true
+      max_concurrency: 2
+      cn_prefix: "cn/"
+      global_prefix: "cb/"
+```
+
+Start CLIProxyAPI:
+```bash
+./cli-proxy-api -config config.yaml
+```
+
+---
+
+## License
+MIT License.

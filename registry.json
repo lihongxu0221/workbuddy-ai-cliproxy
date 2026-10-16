@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "workbuddy",
+      "name": "WorkBuddy AI Proxy Plugin",
+      "description": "Enterprise-grade CLIProxyAPI provider plugin for Tencent WorkBuddy / CodeBuddy (CN & Global realms). Features automated daily 30-credit reward (Global) and 100-credit check-in (CN), admission gate (max 2 slots/account), soft session affinity for prompt cache hotness, in-plugin 429/14018 failover, dynamic model manager, and embedded Web UI.",
+      "author": "workbuddy-ai-team",
+      "version": "1.0.0",
+      "repository": "https://github.com/workbuddy-ai/workbuddy-ai-cliproxy",
+      "homepage": "https://github.com/workbuddy-ai/workbuddy-ai-cliproxy",
+      "license": "MIT",
+      "tags": [
+        "Provider",
+        "OAuth",
+        "WorkBuddy",
+        "CodeBuddy",
+        "Tencent",
+        "OpenAI",
+        "Claude",
+        "Gemini",
+        "Failover",
+        "Quota",
+        "Management"
+      ]
+    }
+  ]
+}

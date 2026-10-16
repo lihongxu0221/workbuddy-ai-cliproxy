@@ -1,0 +1,25 @@
+# 编译与构建二进制产物
+bin/
+*.so
+*.dylib
+*.dll
+*.h
+*.exe
+
+# 运行时凭据与敏感数据 (切勿提交)
+auths/
+workbuddy*.json
+.codebuddy_data/
+*.jsonl
+
+# Go 依赖与测试缓存
+/vendor/
+*.test
+*.out
+
+# 本地编辑器与操作系统生成文件
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

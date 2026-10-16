@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorkBuddy AI - CLIProxyAPI Plugin Console</title>
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-area">
+        <div class="logo-icon">WB</div>
+        <div>
+          <h1>WorkBuddy AI 控制台</h1>
+          <p style="color:var(--text-muted);font-size:12px">CLIProxyAPI 企业级高可用代理插件</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btn-refresh-all" class="btn-secondary">🔄 刷新数据</button>
+        <button id="btn-open-import" class="btn-primary">➕ 导入账号</button>
+      </div>
+    </header>
+
+    <!-- 聚合指标总览 -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-title">今日请求总量</div>
+        <div class="metric-value" id="stat-requests">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">总消耗 Tokens</div>
+        <div class="metric-value" id="stat-tokens">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Prompt 缓存命中率</div>
+        <div class="metric-value" id="stat-cache">0.0%</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">累计扣除 Credits</div>
+        <div class="metric-value" id="stat-credits-spent">0.000</div>
+      </div>
+    </div>
+
+    <!-- 标签切换导航 -->
+    <div class="tabs-nav">
+      <button class="tab-btn active" data-tab="accounts">账号池管理</button>
+      <button class="tab-btn" data-tab="models">模型目录与探测</button>
+      <button class="tab-btn" data-tab="settings">运行配置</button>
+    </div>
+
+    <!-- Tab 1: 账号池管理 -->
+    <div class="tab-pane" id="tab-accounts">
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>账号信息 / UID</th>
+                <th>区域分类</th>
+                <th>积分余额 (Credits)</th>
+                <th>活跃并发</th>
+                <th>健康状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="accounts-tbody">
+              <!-- 动态插入 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: 模型目录与探测 -->
+    <div class="tab-pane" id="tab-models" style="display:none">
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>模型标识 (Model ID)</th>
+                <th>显示名称</th>
+                <th>所属区域</th>
+                <th>厂商</th>
+                <th>费率倍率</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="models-tbody">
+              <!-- 动态插入 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: 运行配置 -->
+    <div class="tab-pane" id="tab-settings" style="display:none">
+      <div class="card">
+        <h3 style="margin-bottom:16px">核心参数设置</h3>
+        <p style="color:var(--text-muted);margin-bottom:12px;font-size:13px">
+          参数已从 <code>config.yaml</code> 加载并生效。
+        </p>
+        <ul style="color:var(--text-muted);font-size:13px;line-height:1.8;padding-left:20px">
+          <li><strong>国际区每日 30 积分打卡</strong>：已启用 (08:00/12:00/16:00/20:00 4-Tick)</li>
+          <li><strong>国内区每日 100 积分签到</strong>：已启用 (09:00/21:00 2-Tick)</li>
+          <li><strong>单账号并发准入控制</strong>：最大 2 槽位 (防封控)</li>
+          <li><strong>软会话粘性 (Affinity)</strong>：已开启 (持续保护 Prompt Cache)</li>
+          <li><strong>路由前缀</strong>：国内区 <code>cn/</code>，国际区 <code>cb/</code></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入账号 Modal -->
+  <div class="modal" id="modal-import">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>导入 WorkBuddy 账号凭证</h3>
+        <button id="btn-close-import" style="background:none;color:var(--text-muted);font-size:18px">✕</button>
+      </div>
+      <form id="form-import">
+        <div class="form-group">
+          <label>所属区域 (Realm)</label>
+          <select id="import-realm">
+            <option value="global">国际区 (Global / codebuddy.ai)</option>
+            <option value="cn">国内区 (CN / copilot.tencent.com)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Access Token (Bearer JWT) *</label>
+          <input type="text" id="import-token" required placeholder="eyJhbGciOi...">
+        </div>
+        <div class="form-group">
+          <label>Refresh Token (可选)</label>
+          <input type="text" id="import-refresh" placeholder="留空则不开启自动刷新">
+        </div>
+        <div class="form-group">
+          <label>用户 User ID (UID)</label>
+          <input type="text" id="import-uid" placeholder="例如 10086">
+        </div>
+        <div class="form-group">
+          <label>显示别名 (Nickname)</label>
+          <input type="text" id="import-nickname" placeholder="例如 我的主号">
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px">
+          <button type="submit" class="btn-primary">保存凭证</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
