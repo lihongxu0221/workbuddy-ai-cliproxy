@@ -47,12 +47,32 @@ func ParsePrefix(rawModel string) ParsedModel {
 		return res
 	}
 
-	// 兼容通用别名 "wb/"
+	// 兼容通用别名 "en/"、"wb/"、"workbuddy/"、"codebuddy/"
+	if strings.HasPrefix(rawModel, "en/") {
+		res.CleanModel = strings.TrimPrefix(rawModel, "en/")
+		res.TargetRealm = auth.RealmGlobal
+		res.HasExplicit = true
+		return res
+	}
+
 	if strings.HasPrefix(rawModel, "wb/") {
 		res.CleanModel = strings.TrimPrefix(rawModel, "wb/")
 		res.TargetRealm = auth.RealmGlobal
 		res.HasExplicit = true
 		return res
+	}
+
+	if strings.HasPrefix(rawModel, "workbuddy/") {
+		res.CleanModel = strings.TrimPrefix(rawModel, "workbuddy/")
+		res.HasExplicit = true
+		// 判断去除前缀后是否还有子前缀
+		return ParsePrefix(res.CleanModel)
+	}
+
+	if strings.HasPrefix(rawModel, "codebuddy/") {
+		res.CleanModel = strings.TrimPrefix(rawModel, "codebuddy/")
+		res.HasExplicit = true
+		return ParsePrefix(res.CleanModel)
 	}
 
 	// 若未带显式前缀，通过注册表先验推断

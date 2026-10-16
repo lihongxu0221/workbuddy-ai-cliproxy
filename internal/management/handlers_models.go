@@ -60,7 +60,7 @@ func HandleTestModel(c *gin.Context) {
 	}
 	payloadBytes, _ := json.Marshal(testReq)
 
-	resp, err := pipeline.ExecuteWithFailover(c.Request.Context(), parsed.TargetRealm, parsed.CleanModel, "test-ping", executor.Request{
+	resp, err := pipeline.ExecuteWithFailover(c.Request.Context(), "", parsed.TargetRealm, parsed.CleanModel, "test-ping", executor.Request{
 		Model:   parsed.CleanModel,
 		Payload: payloadBytes,
 	})

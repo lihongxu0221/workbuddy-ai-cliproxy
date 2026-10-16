@@ -42,7 +42,7 @@ func (s *Store) Init(authDir string) error {
 	return s.loadAllLocked()
 }
 
-// loadAllLocked 从 authDir 扫描并加载所有 workbuddy 凭据文件
+// loadAllLocked 从 authDir 扫描并加载所有凭据文件 (支持 workbuddy*, codebuddy*, copilot*)
 func (s *Store) loadAllLocked() error {
 	if _, err := os.Stat(s.authDir); os.IsNotExist(err) {
 		return os.MkdirAll(s.authDir, 0755)
@@ -58,7 +58,10 @@ func (s *Store) loadAllLocked() error {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
 		}
-		if !strings.HasPrefix(entry.Name(), "workbuddy") {
+		nameLower := strings.ToLower(entry.Name())
+		if !strings.HasPrefix(nameLower, "workbuddy") &&
+			!strings.HasPrefix(nameLower, "codebuddy") &&
+			!strings.HasPrefix(nameLower, "copilot") {
 			continue
 		}
 
@@ -68,34 +71,158 @@ func (s *Store) loadAllLocked() error {
 			continue
 		}
 
-		var acc WorkBuddyAuth
-		if err := json.Unmarshal(data, &acc); err != nil {
+		parsedList, err := ParseAuthPayload(data, entry.Name(), fullPath)
+		if err != nil || len(parsedList) == 0 {
 			continue
 		}
 
-		if acc.Type != "workbuddy" && acc.Type != "" {
-			continue
+		for _, acc := range parsedList {
+			loaded[acc.ID] = acc
 		}
-		acc.Type = "workbuddy"
-		acc.FilePath = fullPath
-
-		if acc.Realm == "" {
-			if strings.Contains(entry.Name(), "intl") || strings.Contains(entry.Name(), "global") {
-				acc.Realm = RealmGlobal
-			} else {
-				acc.Realm = RealmCN
-			}
-		}
-
-		if acc.ID == "" {
-			acc.ID = strings.TrimSuffix(entry.Name(), ".json")
-		}
-
-		loaded[acc.ID] = &acc
 	}
 
 	s.accounts = loaded
 	return nil
+}
+
+// StoredAuthCodeBuddy 兼容 Sliverkiss / 官方 workbuddy.json 存储结构
+type StoredAuthCodeBuddy struct {
+	Auth struct {
+		AccessToken  string `json:"accessToken"`
+		RefreshToken string `json:"refreshToken"`
+		ExpiresAt    int64  `json:"expiresAt"`
+		Domain       string `json:"domain"`
+	} `json:"auth"`
+	Account struct {
+		UID          string `json:"uid"`
+		EnterpriseID string `json:"enterpriseId"`
+		Nickname     string `json:"nickname"`
+	} `json:"account"`
+}
+
+// ParseAuthPayload 解析一段 JSON 数据，支持单账号、多账号数组、CodeBuddy 结构以及 WorkBuddy 结构
+func ParseAuthPayload(raw []byte, fileName, path string) ([]*WorkBuddyAuth, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("empty auth payload")
+	}
+
+	// 1. 尝试解析为顶层数组 (多账号格式 [ {...}, {...} ])
+	var rawList []json.RawMessage
+	if err := json.Unmarshal(raw, &rawList); err == nil && len(rawList) > 0 {
+		var results []*WorkBuddyAuth
+		for idx, item := range rawList {
+			accs, err := parseSingleOrNested(item, fmt.Sprintf("%s#%d", fileName, idx), path)
+			if err == nil {
+				results = append(results, accs...)
+			}
+		}
+		if len(results) > 0 {
+			return results, nil
+		}
+	}
+
+	// 2. 尝试解析为 {"accounts": [ ... ]}
+	var wrapped struct {
+		Accounts []json.RawMessage `json:"accounts"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil && len(wrapped.Accounts) > 0 {
+		var results []*WorkBuddyAuth
+		for idx, item := range wrapped.Accounts {
+			accs, err := parseSingleOrNested(item, fmt.Sprintf("%s#%d", fileName, idx), path)
+			if err == nil {
+				results = append(results, accs...)
+			}
+		}
+		if len(results) > 0 {
+			return results, nil
+		}
+	}
+
+	// 3. 单账号解析
+	return parseSingleOrNested(raw, fileName, path)
+}
+
+func parseSingleOrNested(raw []byte, fileName, path string) ([]*WorkBuddyAuth, error) {
+	// A. 尝试 CodeBuddy standard format
+	var cb StoredAuthCodeBuddy
+	if err := json.Unmarshal(raw, &cb); err == nil && cb.Auth.AccessToken != "" {
+		realm := SniffRealm(cb.Auth.Domain, fileName, path)
+		accID := generateAccountID(cb.Account.UID, realm, fileName)
+		acc := &WorkBuddyAuth{
+			Type:         "workbuddy",
+			ID:           accID,
+			Realm:        realm,
+			AccessToken:  cb.Auth.AccessToken,
+			RefreshToken: cb.Auth.RefreshToken,
+			ExpiresAt:    cb.Auth.ExpiresAt,
+			UserID:       cb.Account.UID,
+			EnterpriseID: cb.Account.EnterpriseID,
+			Nickname:     cb.Account.Nickname,
+			FilePath:     path,
+		}
+		return []*WorkBuddyAuth{acc}, nil
+	}
+
+	// B. 尝试 WorkBuddy 原生结构
+	var wb WorkBuddyAuth
+	if err := json.Unmarshal(raw, &wb); err == nil && wb.AccessToken != "" {
+		if wb.Realm == "" {
+			wb.Realm = SniffRealm("", fileName, path)
+		}
+		if wb.ID == "" {
+			wb.ID = generateAccountID(wb.UserID, wb.Realm, fileName)
+		}
+		wb.Type = "workbuddy"
+		wb.FilePath = path
+		return []*WorkBuddyAuth{&wb}, nil
+	}
+
+	return nil, fmt.Errorf("unrecognized auth format")
+}
+
+// SniffRealm 根据域名、文件名与路径推断账号归属区域 (RealmCN vs RealmGlobal)
+func SniffRealm(domain, fileName, path string) Realm {
+	combined := strings.ToLower(fmt.Sprintf("%s %s %s", domain, fileName, path))
+
+	if strings.Contains(combined, "copilot.tencent.com") ||
+		strings.Contains(combined, "codebuddy.cn") ||
+		strings.Contains(combined, "workbuddy.cn") ||
+		strings.Contains(combined, "-cn") ||
+		strings.Contains(combined, "_cn") ||
+		strings.Contains(combined, ".cn.") {
+		return RealmCN
+	}
+
+	if strings.Contains(combined, "codebuddy.ai") ||
+		strings.Contains(combined, "workbuddy.ai") ||
+		strings.Contains(combined, "intl") ||
+		strings.Contains(combined, "global") ||
+		strings.Contains(combined, "-en") ||
+		strings.Contains(combined, "_en") {
+		return RealmGlobal
+	}
+
+	// 默认依据文件名推断
+	if strings.Contains(strings.ToLower(fileName), "cn") {
+		return RealmCN
+	}
+	if strings.Contains(strings.ToLower(fileName), "global") || strings.Contains(strings.ToLower(fileName), "intl") {
+		return RealmGlobal
+	}
+
+	// 兜底默认设为 CN
+	return RealmCN
+}
+
+func generateAccountID(uid string, realm Realm, fileName string) string {
+	cleanName := strings.TrimSuffix(filepath.Base(fileName), filepath.Ext(fileName))
+	if uid != "" {
+		return fmt.Sprintf("workbuddy-%s-%s", uid, realm)
+	}
+	if cleanName != "" && cleanName != "workbuddy" {
+		return cleanName
+	}
+	return fmt.Sprintf("workbuddy-%s", realm)
 }
 
 // Reload 重新从磁盘扫描加载
@@ -140,6 +267,16 @@ func (s *Store) GetByID(id string) *WorkBuddyAuth {
 		return acc.Copy()
 	}
 	return nil
+}
+
+// UpsertInMemory 仅在内存中注册或更新账号 (供插件 RPC 动态注册)
+func (s *Store) UpsertInMemory(acc *WorkBuddyAuth) {
+	if acc == nil || acc.ID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.accounts[acc.ID] = acc.Copy()
 }
 
 // Save 更新并原子写回磁盘

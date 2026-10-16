@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"workbuddy-ai-cliproxy/internal/auth"
 )
 
@@ -48,15 +49,17 @@ func (e *WorkBuddyExecutor) PrepareRequest(req *http.Request, a *auth.WorkBuddyA
 	return nil
 }
 
-// Execute 执行非流式请求
+// Execute 执行非流式请求 (针对腾讯 11101 错误，强制上游流式并在内存中聚合)
 func (e *WorkBuddyExecutor) Execute(ctx context.Context, a *auth.WorkBuddyAuth, req Request) (Response, error) {
 	acc, err := e.refresher.RefreshIfExpired(ctx, a)
 	if err != nil {
 		acc = a
 	}
 
+	body := RewriteSystemForUpstream(ForceStreamBody(req.Payload, nil))
 	apiURL := fmt.Sprintf("%s/v2/chat/completions", acc.BaseURL())
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(req.Payload))
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(body))
 	if err != nil {
 		return Response{}, fmt.Errorf("create upstream request failed: %w", err)
 	}
@@ -70,21 +73,22 @@ func (e *WorkBuddyExecutor) Execute(ctx context.Context, a *auth.WorkBuddyAuth, 
 	}
 	defer resp.Body.Close()
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return Response{}, fmt.Errorf("read upstream response failed: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode >= 400 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
 		return Response{Payload: bodyBytes}, &UpstreamError{
 			StatusCode: resp.StatusCode,
 			Body:       string(bodyBytes),
 		}
 	}
 
-	usage := ParseTerminalUsage(bodyBytes)
+	completionBytes, err := AggregateCompletion(resp.Body, req.Model)
+	if err != nil {
+		return Response{}, fmt.Errorf("aggregate completion failed: %w", err)
+	}
+
+	usage := ParseTerminalUsage(completionBytes)
 	return Response{
-		Payload: bodyBytes,
+		Payload: completionBytes,
 		Usage:   usage,
 	}, nil
 }
@@ -96,8 +100,10 @@ func (e *WorkBuddyExecutor) ExecuteStream(ctx context.Context, a *auth.WorkBuddy
 		acc = a
 	}
 
+	body := RewriteSystemForUpstream(ForceStreamBody(req.Payload, nil))
 	apiURL := fmt.Sprintf("%s/v2/chat/completions", acc.BaseURL())
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(req.Payload))
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create stream request failed: %w", err)
 	}
@@ -110,7 +116,7 @@ func (e *WorkBuddyExecutor) ExecuteStream(ctx context.Context, a *auth.WorkBuddy
 		return nil, fmt.Errorf("do stream request failed: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode >= 400 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		return nil, &UpstreamError{
@@ -139,16 +145,20 @@ func (e *UpstreamError) Error() string {
 
 // Is429 是否为频率限制
 func (e *UpstreamError) Is429() bool {
-	return e.StatusCode == http.StatusTooManyRequests
+	return e.StatusCode == http.StatusTooManyRequests ||
+		strings.Contains(e.Body, "11200") ||
+		strings.Contains(e.Body, "rate limit")
 }
 
 // IsCreditExhausted 是否为积分耗尽 (402 或 code 14018)
 func (e *UpstreamError) IsCreditExhausted() bool {
 	return e.StatusCode == http.StatusPaymentRequired ||
-		(e.StatusCode == 400 && bytes.Contains([]byte(e.Body), []byte("14018")))
+		strings.Contains(e.Body, "14018") ||
+		strings.Contains(e.Body, "insufficient credit") ||
+		strings.Contains(e.Body, "credit balance")
 }
 
 // IsGatewayError 是否为 6004 或 502/504 网关异常
 func (e *UpstreamError) IsGatewayError() bool {
-	return e.StatusCode >= 500 || bytes.Contains([]byte(e.Body), []byte("6004"))
+	return e.StatusCode >= 500 || strings.Contains(e.Body, "6004")
 }

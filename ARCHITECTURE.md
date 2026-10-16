@@ -6,11 +6,20 @@
 
 ## 1. 方案背景与架构定位
 
-### 1.1 CLIProxyAPI (CPA) 插件体系原理
-CLIProxyAPI 是业界领先的高性能 AI 模型本地聚合网关。CPA 自 v6/v7 版本起引入了基于 Go 运行时和 C-Shared（`.so` / `.dll` / `.dylib`）的动态插件系统：
-- **符号导出机制**：宿主通过标准动态链接库符号（如 `InitPlugin(ctx unsafe.Pointer) unsafe.Pointer`）加载第三方动态库；
-- **ProviderExecutor 接口解耦**：插件作为独立的 Provider 执行单元接入 CPA 的核心认证与路由管理器（`auth.Manager`）；
-- **独立生命周期管理**：插件可向 CPA 注入自定义 Gin 路由（挂载至 `/v0/management/plugins/{plugin_id}`），注册前端 Web 静态资产，监听配置热重载事件。
+### 1.1 CLIProxyAPI (CPA) 插件体系全版本兼容架构 (v6 / v7 / v8)
+CLIProxyAPI 是业界领先的高性能 AI 模型本地聚合网关。CPA 在版本演进中提供了丰富且灵活的插件加载与扩展机制：
+- **CPA v7 / v8 官方标准 C ABI 体系**：
+  - 核心导出符号：`cliproxy_plugin_init`、`cliproxyPluginCall`、`cliproxyPluginFree`、`cliproxyPluginShutdown`；
+  - 采用无语言依赖的二进制 C 函数指针表，通过 JSON RPC 信封完成状态与能力交互；
+  - 支持 `schema_version` 动态自协商机制（插件自适应协商 `min(hostVersion, 6)`），平滑兼容 CPA v7.1.x ~ v7.3.x 及 v8.0.x，杜绝版本报错；
+  - 支持多账号凭据展开（`auth.parse` 返回 `Auths []AuthData` 切片），单个凭据文件可自动展开为多个虚拟 Provider Auth；
+  - 支持真流式（Async Streaming）：通过 `host.stream.emit` 与 `host.stream.close` 实时逐字推流，实现与上游零缓冲同步；
+  - 完整声明并实现 `ModelProvider`、`AuthProvider`、`Executor`、`ManagementAPI` 与 `QuotaProvider`。
+- **CPA v6 及自定义加载器向下兼容体系**：
+  - 导出传统符号：`InitPlugin(ctx unsafe.Pointer) unsafe.Pointer`、`RegisterRoutes(routerGroup unsafe.Pointer)`、`UnloadPlugin()`；
+  - 保证在早期定制宿主或第三方集成加载器中无缝挂载。
+- **独立服务 (Standalone CLI) 模式**：
+  - 二进制可作为独立进程运行（`-standalone -port 8318`），提供标准 OpenAI 兼容的 `/v1/chat/completions` 与 `/v1/models` 端点以及 `/ui` 控制台，完美支持不支持 CGO 动态库的 CPA v6 外部网关反代接入。
 
 ### 1.2 腾讯 WorkBuddy / CodeBuddy 生态特征
 腾讯 WorkBuddy（原 CodeBuddy）是腾讯推出的全场景智能编码与办公智能体工作台：

@@ -2,11 +2,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8.svg)](https://golang.org)
-[![CLIProxyAPI Compatibility](https://img.shields.io/badge/CLIProxyAPI-v6%20%7C%20v7-success.svg)](https://github.com/router-for-me/CLIProxyAPI)
+[![CLIProxyAPI Compatibility](https://img.shields.io/badge/CLIProxyAPI-v6%20%7C%20v7%20%7C%20v8-success.svg)](https://github.com/router-for-me/CLIProxyAPI)
 
-> **将腾讯 WorkBuddy / CodeBuddy（国内区 + 国际区）深度集成进 CLIProxyAPI (CPA) 的企业级高可用代理插件方案。**
+> **将腾讯 WorkBuddy / CodeBuddy（国内区 + 国际区）深度集成进 CLIProxyAPI (CPA) 的全版本高可用代理插件方案。**
 > 
-> 支持将 WorkBuddy 账号池转换为标准 **OpenAI Chat Completions**、**Anthropic Claude Messages** 与 **Google Gemini GenerateContent** 接口，无缝接入 Cursor、VS Code Copilot、Claude Code、Windsurf、Cline、Roo Code 等主流编程客户端。
+> 全面兼容 **CPA v6 / v7 / v8 插件接口**，原生支持 **cn 国内区** 与 **en / workbuddyai 国际区**，深度支持 **多账号并发与容灾换号**。同时支持将 WorkBuddy 账号池转换为标准 **OpenAI Chat Completions**、**Anthropic Claude Messages** 与 **Google Gemini GenerateContent** 接口，无缝接入 Cursor、VS Code Copilot、Claude Code、Windsurf、Cline、Roo Code 等主流编程客户端。
 
 ---
 
@@ -16,11 +16,12 @@
 - [支持的模型清单](#支持的模型清单)
 - [双区架构与凭证规范](#双区架构与凭证规范)
 - [核心机制解析](#核心机制解析)
-  - [1. 国际区每日 30 积分打卡与国内区签到](#1-国际区每日-30-积分打卡与国内区签到)
-  - [2. 进程内账号智能故障转移 (Failover)](#2-进程内账号智能故障转移-failover)
-  - [3. 单账号并发准入控制 (Admission Gate)](#3-单账号并发准入控制-admission-gate)
-  - [4. 软会话粘性 (Soft Session Affinity) 与 Prompt Cache 保护](#4-软会话粘性-soft-session-affinity-与-prompt-cache-保护)
-  - [5. 动态模型管理器与前缀路由](#5-动态模型管理器与前缀路由)
+  - [1. CPA v6/v7/v8 全版本插件接口兼容](#1-cpa-v6v7v8-全版本插件接口兼容)
+  - [2. 国际区每日 30 积分打卡与国内区签到](#2-国际区每日-30-积分打卡与国内区签到)
+  - [3. 多账号管理与进程内智能故障转移 (Failover)](#3-多账号管理与进程内智能故障转移-failover)
+  - [4. 单账号并发准入控制 (Admission Gate)](#4-单账号并发准入控制-admission-gate)
+  - [5. 软会话粘性 (Soft Session Affinity) 与 Prompt Cache 保护](#5-软会话粘性-soft-session-affinity-与-prompt-cache-保护)
+  - [6. 动态模型管理器与前缀路由](#6-动态模型管理器与前缀路由)
 - [快速开始](#快速开始)
   - [1. 编译动态库](#1-编译动态库)
   - [2. 安装至 CLIProxyAPI](#2-安装至-cliproxyapi)
@@ -34,25 +35,28 @@
 
 ## 核心亮点
 
-1. **双区原生融合 (CN + Global Dual-Realm)**：
+1. **CPA v6 / v7 / v8 接口全兼容**：
+   - 官方标准 C ABI 导出：`cliproxy_plugin_init`、`cliproxyPluginCall`、`cliproxyPluginFree`、`cliproxyPluginShutdown`；
+   - 向下兼容传统导出：`InitPlugin`、`RegisterRoutes`、`UnloadPlugin`（兼容 CPA v6 及第三方加载器）；
+   - SchemaVersion 自协商：自适应协商 `min(hostVersion, 6)`，杜绝 `plugin schema version is not supported` 错误；
+   - 独立服务模式：支持命令行直接运行为独立 HTTP 代理服务（`:8318`），无 CGO 环境亦可使用。
+2. **双区原生融合 (cn 国内区 + en / workbuddyai 国际区)**：
    - 自动识别 WorkBuddy 国内区（`copilot.tencent.com` / `workbuddy.cn`）与国际区（`workbuddy.ai` / `codebuddy.ai`），解决海外账号被错误路由至国内网关报 401 网页重定向的顽疾。
-   - 提供隔离前缀路由（`cn/` 与 `cb/` 或 `wb/`），避免同名模型冲突。
-2. **零人工干预的每日积分白嫖引擎 (Daily Growth Reward)**：
+   - 提供隔离前缀路由（`cn/` 与 `cb/`、`en/`、`wb/`），并支持无前缀注册表自动定位。
+   - 强制上游流式（解决 11101 错误），精准过滤 Claude Code 敏感模板词，对 Hunyuan 3 自动开启深度思考。
+3. **多账号矩阵与零感知换号容灾 (Multi-Account & Smart Failover)**：
+   - 认证解析支持单文件凭证与单文件多账号数组（`auth.parse` 展开 `Auths` 切片）；
+   - 遭遇 **429 频率限制**、**402 / 14018 积分耗尽** 或 **6004 网关抖动** 时，插件内无感自动切流至同 Realm 健康账号重试。
+4. **零人工干预的每日积分白嫖引擎 (Daily Growth Reward)**：
    - **国际区**：通过向 `POST /v2/report` 发送保活活跃事件触发 Growth Centre 热力图，次日自动入账 **30 积分/天（Bonus Pack，30天有效）**，并支持 14 天/28 天连续打卡奖励累加；新号一键激活 250 积分 Expert 权益。
    - **国内区**：自动执行每日签到，稳定入账 **100 积分/天 + 500 积分/月**。
-   - 内置防重入、热力图反向探测与 4-Tick 分布式退避调度（08:00 / 12:00 / 16:00 / 20:00）。
-3. **插件级零感知故障转移 (In-Plugin Smart Failover)**：
-   - 针对 C-Shared 动态库无法复用宿主 Selector 重试机制的问题，插件内建多账号轮询与自动重试链。
-   - 遭遇 **429 频率限制**、**402 / 14018 积分耗尽** 或 **6004 网关抖动** 时，无损切流到同 Realm 可用账号，不向客户端吐报错。
-4. **防封控并发准入与会话粘性 (Admission & Affinity)**：
+   - 内置防重入、热力图反向探测与 4-Tick 分布式退避调度（08:00 / 12:00 / 16:00 / 20:00），账号间强制 1.5s 起搏间隔。
+5. **防封控并发准入与会话粘性 (Admission & Affinity)**：
    - 严格单账号 **最大 2 并发槽位** 控制，杜绝多 IDE 客户端并发暴刷触发上游封号风险。
    - 基于会话哈希的**软会话粘性**，优先复用历史账号以最大化触发上游 Prompt Cache，降本 90% 以上；账号满载或冷却时平滑转移并不折返。
-5. **多协议全双工转换 (Multi-Protocol Translation)**：
+6. **多协议全双工转换与嵌入式控制台**：
    - 完整支持 **OpenAI Chat / Stream**、**Claude Messages / Stream (含 Thinking)**、**Gemini GenerateContent**。
-   - 深度支持 Function Calling / Tool Use 映射，支持多模态图片/文件输入。
-6. **企业级用量审计与控制台 (Observability & Web UI)**：
-   - 仅记录去隐私元数据（Token 消耗、上游 Credit 扣费、耗时、模型、命中状态）至高性能 JSONL，附带分析报告脚本。
-   - 嵌入式 Web 控制台支持中英双语、卡片/表格双视图、积分包到期倒计时、模型即时连通性测试。
+   - 嵌入式 Web 控制台支持中英双语、多账号实时状态看板、积分包到期倒计时、模型即时连通性测试。
 
 ---
 

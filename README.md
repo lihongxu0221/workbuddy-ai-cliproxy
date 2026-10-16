@@ -2,11 +2,11 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.24%2B-00ADD8.svg)](https://golang.org)
-[![CLIProxyAPI Compatibility](https://img.shields.io/badge/CLIProxyAPI-v6%20%7C%20v7-success.svg)](https://github.com/router-for-me/CLIProxyAPI)
+[![CLIProxyAPI Compatibility](https://img.shields.io/badge/CLIProxyAPI-v6%20%7C%20v7%20%7C%20v8-success.svg)](https://github.com/router-for-me/CLIProxyAPI)
 
 > **Enterprise-grade high-availability proxy plugin integrating Tencent WorkBuddy / CodeBuddy (CN & Global realms) into CLIProxyAPI (CPA).**
 >
-> Transforms WorkBuddy multi-account pools into standard **OpenAI Chat Completions**, **Anthropic Claude Messages**, and **Google Gemini GenerateContent** endpoints, seamlessly powering Cursor, VS Code Copilot, Claude Code, Windsurf, Cline, Roo Code, and more.
+> Fully compatible with **CPA v6 / v7 / v8 plugin interfaces**, with native support for **both CN & EN (workbuddyai) dual platforms** and **multi-account resilience**. Transforms WorkBuddy multi-account pools into standard **OpenAI Chat Completions**, **Anthropic Claude Messages**, and **Google Gemini GenerateContent** endpoints, seamlessly powering Cursor, VS Code Copilot, Claude Code, Windsurf, Cline, Roo Code, and more.
 
 ---
 
@@ -16,11 +16,12 @@
 - [Supported Models](#supported-models)
 - [Dual Realm & Credential Specs](#dual-realm--credential-specs)
 - [Core Engineering Mechanisms](#core-engineering-mechanisms)
-  - [1. Global 30-Credit Daily Reward & CN Check-in](#1-global-30-credit-daily-reward--cn-check-in)
-  - [2. In-Plugin Resilient Failover](#2-in-plugin-resilient-failover)
-  - [3. Per-Account Concurrency Admission Gate](#3-per-account-concurrency-admission-gate)
-  - [4. Soft Session Affinity & Prompt Cache Protection](#4-soft-session-affinity--prompt-cache-protection)
-  - [5. Dynamic Model Manager & Realm Routing](#5-dynamic-model-manager--realm-routing)
+  - [1. Full Compatibility with CPA v6 / v7 / v8](#1-full-compatibility-with-cpa-v6--v7--v8)
+  - [2. Global 30-Credit Daily Reward & CN Check-in](#2-global-30-credit-daily-reward--cn-check-in)
+  - [3. Multi-Account Management & In-Plugin Resilient Failover](#3-multi-account-management--in-plugin-resilient-failover)
+  - [4. Per-Account Concurrency Admission Gate](#4-per-account-concurrency-admission-gate)
+  - [5. Soft Session Affinity & Prompt Cache Protection](#5-soft-session-affinity--prompt-cache-protection)
+  - [6. Dynamic Model Manager & Realm Routing](#6-dynamic-model-manager--realm-routing)
 - [Quick Start](#quick-start)
   - [1. Build Shared Library](#1-build-shared-library)
   - [2. Install into CLIProxyAPI](#2-install-into-cliproxyapi)
@@ -33,24 +34,28 @@
 
 ## Key Highlights
 
-1. **Native Dual-Realm Integration (CN + Global)**:
+1. **Full Compatibility with CPA v6 / v7 / v8**:
+   - Standard C ABI exports (`cliproxy_plugin_init`, `cliproxyPluginCall`, `cliproxyPluginFree`, `cliproxyPluginShutdown`) for CPA v7 and v8.
+   - Backward-compatible exports (`InitPlugin`, `RegisterRoutes`, `UnloadPlugin`) for CPA v6 and custom hosts.
+   - Dynamic `schema_version` negotiation (`min(hostVersion, 6)`), eliminating version mismatch errors.
+   - Standalone CLI HTTP proxy server mode (`:8318`), allowing deployment without CGO.
+2. **Native Dual-Realm Integration (CN + Global / EN / workbuddyai)**:
    - Detects whether an account belongs to CN (`copilot.tencent.com` / `workbuddy.cn`) or Global (`workbuddy.ai` / `codebuddy.ai`), preventing unauthorized 401 redirect crashes on international credentials.
-   - Dedicated model prefixes (`cn/` vs `cb/` or `wb/`) ensure clean routing without naming collisions.
-2. **Zero-Touch Daily Credit Harvest Engine**:
-   - **Global Realm**: Automates daily report submission via `POST /v2/report` with `eventCode: "chat_request_send"`. Verified next-day delivery of **30 credits/day per account** (`Bonus Pack`, 30-day validity), plus consecutive streak tiers (+50 credits at 14d, +150 credits at 28d) and one-click 250-credit Expert trial.
+   - Dedicated model prefixes (`cn/` vs `cb/`, `en/`, `wb/`) ensure clean routing without naming collisions.
+   - Forces upstream streaming (bypassing code 11101), rewrites Claude Code filter words, and injects maximum reasoning depth for Hunyuan 3.
+3. **Multi-Account Matrix & In-Plugin Resilient Failover**:
+   - Parses both individual JSON credentials and multi-account arrays in a single file (`Auths` expansion).
+   - Transparently handles **HTTP 429**, **HTTP 402 / code 14018 (Credits exhausted)**, and **code 6004** errors by rotating to healthy accounts in the same realm without dropping client streams.
+4. **Zero-Touch Daily Credit Harvest Engine**:
+   - **Global Realm**: Automates daily report submission via `POST /v2/report` with 1.5s pacing. Verified next-day delivery of **30 credits/day per account** (`Bonus Pack`, 30-day validity), plus streak rewards (+50 at 14d, +150 at 28d) and 250-credit Expert trial.
    - **CN Realm**: Automated daily check-in delivering **100 credits/day + 500 credits/month**.
    - Idempotent heatmap detection with 4-tick spaced scheduler (`08:00`, `12:00`, `16:00`, `20:00`).
-3. **In-Plugin Resilient Failover**:
-   - Overcomes CPA C-shared library isolation by implementing an internal multi-account retry pipeline.
-   - Transparently handles **HTTP 429**, **HTTP 402 / code 14018 (Credits exhausted)**, and **code 6004** errors by rotating to healthy accounts in the same realm without dropping client streams.
-4. **Anti-Abuse Admission Control & Prompt Cache Affinity**:
+5. **Anti-Abuse Admission Control & Prompt Cache Affinity**:
    - Enforces a hard **maximum 2 in-flight requests per account** admission gate, preventing sudden bursts from triggering account bans.
    - **Soft Session Affinity** binds client conversations to specific accounts, maintaining high upstream Prompt Cache hit rates (reducing token billing by up to 90%) while degrading gracefully when congested.
-5. **Full Bidirectional Protocol Translation**:
+6. **Full Bidirectional Protocol Translation & Embedded Dashboard**:
    - Supports standard OpenAI format, Anthropic Claude format (including thinking tokens), and Google Gemini format.
-   - Robust Function Calling / Tool Use handling and multimodal payload translation.
-6. **Privacy-Preserving Usage Auditing**:
-   - Emits structured JSONL audit logs containing token counts, upstream credit billing, latency, and model names with zero credential or prompt content leakage.
+   - Embedded Web Console for real-time account status, credit balance monitoring, and model connectivity latency tests.
 
 ---
 

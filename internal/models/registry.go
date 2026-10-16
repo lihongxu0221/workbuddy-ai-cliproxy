@@ -152,6 +152,87 @@ func (r *Registry) loadDefaults() {
 		ContextLength:    128000,
 		IsFree:           false,
 	})
+	r.registerStatic(&ModelInfo{
+		ID:               "glm-5.2",
+		DisplayName:      "GLM-5.2",
+		Vendor:           "Zhipu",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 0.8,
+		ContextLength:    1000000,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "glm-5.1",
+		DisplayName:      "GLM-5.1",
+		Vendor:           "Zhipu",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 0.6,
+		ContextLength:    131072,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "glm-5v-turbo",
+		DisplayName:      "GLM-5V Turbo",
+		Vendor:           "Zhipu",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 0.6,
+		ContextLength:    131072,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "kimi-k2.7",
+		DisplayName:      "Kimi K2.7",
+		Vendor:           "Moonshot",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 0.8,
+		ContextLength:    262144,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "minimax-m3-pay",
+		DisplayName:      "MiniMax M3",
+		Vendor:           "MiniMax",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 0.8,
+		ContextLength:    204800,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "hy3",
+		DisplayName:      "Tencent Hy3 (Deep Reasoning)",
+		Vendor:           "Tencent",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 1.0,
+		ContextLength:    262144,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "hy3-preview",
+		DisplayName:      "Tencent Hy3 Preview",
+		Vendor:           "Tencent",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 1.0,
+		ContextLength:    262144,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "hy3-preview-agent",
+		DisplayName:      "Tencent Hy3 Preview Agent",
+		Vendor:           "Tencent",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 1.0,
+		ContextLength:    262144,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "deepseek-v4-pro",
+		DisplayName:      "DeepSeek V4 Pro",
+		Vendor:           "DeepSeek",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 1.0,
+		ContextLength:    1000000,
+		IsFree:           false,
+	})
 }
 
 func (r *Registry) registerStatic(m *ModelInfo) {

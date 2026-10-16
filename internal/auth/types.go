@@ -42,6 +42,8 @@ type WorkBuddyAuth struct {
 	ExpiresAt int64 `json:"expires_at"`
 	// UserID 上游分配的用户唯一 ID
 	UserID string `json:"user_id"`
+	// EnterpriseID 企业 ID (国内区多租户)
+	EnterpriseID string `json:"enterprise_id,omitempty"`
 	// Email 用户邮箱/账号标识
 	Email string `json:"email,omitempty"`
 	// Nickname 用户显示昵称
@@ -103,6 +105,7 @@ func (a *WorkBuddyAuth) Copy() *WorkBuddyAuth {
 		RefreshToken:   a.RefreshToken,
 		ExpiresAt:      a.ExpiresAt,
 		UserID:         a.UserID,
+		EnterpriseID:   a.EnterpriseID,
 		Email:          a.Email,
 		Nickname:       a.Nickname,
 		Credits:        a.Credits,

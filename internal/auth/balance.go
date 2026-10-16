@@ -24,7 +24,7 @@ func NewBalanceChecker() *BalanceChecker {
 }
 
 type userResourceResp struct {
-	Code int `json:"code"`
+	Code int    `json:"code"`
 	Msg  string `json:"msg"`
 	Data struct {
 		TotalCredits float64         `json:"totalCredits"`
@@ -43,10 +43,24 @@ func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+acc.AccessToken)
-	req.Header.Set("User-Agent", "WorkBuddy/1.2.8 (Windows NT 10.0; Win64; x64) Electron/32.2.1")
 	req.Header.Set("X-Domain", acc.Domain())
+
+	if acc.Realm == RealmCN {
+		req.Header.Set("User-Agent", "CLI/2.63.2 CodeBuddy/2.63.2")
+		req.Header.Set("Origin", "https://www.codebuddy.cn")
+		req.Header.Set("Referer", "https://www.codebuddy.cn/")
+		req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	} else {
+		req.Header.Set("User-Agent", "WorkBuddy/1.2.8 (Windows NT 10.0; Win64; x64) Electron/32.2.1")
+		req.Header.Set("Origin", "https://www.codebuddy.ai")
+		req.Header.Set("Referer", "https://www.codebuddy.ai/")
+	}
+
 	if acc.UserID != "" {
 		req.Header.Set("X-User-Id", acc.UserID)
+	}
+	if acc.EnterpriseID != "" {
+		req.Header.Set("X-Enterprise-Id", acc.EnterpriseID)
 	}
 
 	resp, err := b.client.Do(req)
