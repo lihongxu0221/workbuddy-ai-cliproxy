@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 	"workbuddy-ai-cliproxy/internal/config"
 )
@@ -20,7 +23,7 @@ func NewBalanceChecker() *BalanceChecker {
 	return &BalanceChecker{}
 }
 
-// FetchBalance 查询账号当前剩余积分总额及各积分包明细 (支持代理、双区伪装与多字段兼容)
+// FetchBalance 查询账号当前剩余积分总额及各积分包明细 (支持国内区防爬标头、代理、包明细累加与赠送积分识别)
 func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (float64, []CreditPackage, error) {
 	if acc == nil {
 		return 0, nil, fmt.Errorf("account is nil")
@@ -29,13 +32,14 @@ func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (
 	client := config.NewHTTPClient(25*time.Second, acc.ProxyURL)
 
 	// 1. 尝试主计费接口 /v2/billing/meter/get-user-resource
-	credits, pkgs, err := b.fetchEndpoint(ctx, client, acc, fmt.Sprintf("%s/v2/billing/meter/get-user-resource", acc.BaseURL()))
+	primaryURL := fmt.Sprintf("%s/v2/billing/meter/get-user-resource", acc.BaseURL())
+	credits, pkgs, err := b.fetchEndpoint(ctx, client, acc, primaryURL)
 	if err == nil && (credits > 0 || len(pkgs) > 0) {
 		b.updateAccountBalance(acc, credits, pkgs)
 		return credits, pkgs, nil
 	}
 
-	// 2. 若主接口未查到有效积分，尝试备用接口 /v2/billing/balance
+	// 2. 尝试备选接口 /v2/billing/balance
 	fallbackURL := fmt.Sprintf("%s/v2/billing/balance", acc.BaseURL())
 	creditsFb, pkgsFb, errFb := b.fetchEndpoint(ctx, client, acc, fallbackURL)
 	if errFb == nil && (creditsFb > 0 || len(pkgsFb) > 0) {
@@ -43,7 +47,7 @@ func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (
 		return creditsFb, pkgsFb, nil
 	}
 
-	// 3. 国内区特殊兜底：如果是 CN 账号，且此前已有积分记录，保留已有积分避免被抹为 0
+	// 3. 兜底保护：如果上游返回失败但账号已有大于 0 的历史积分，保留历史积分不抹零
 	acc.mu.RLock()
 	existingCredits := acc.Credits
 	existingPkgs := acc.CreditPackages
@@ -53,7 +57,6 @@ func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (
 		return existingCredits, existingPkgs, nil
 	}
 
-	// 返回首次尝试的错误或解析结果
 	if err != nil {
 		return 0, nil, err
 	}
@@ -138,13 +141,13 @@ func (b *BalanceChecker) fetchEndpoint(ctx context.Context, client *http.Client,
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("[workbuddy] fetch balance %s status %d: %s", acc.ID, resp.StatusCode, string(bodyBytes))
-		return 0, nil, fmt.Errorf("upstream status: %d", resp.StatusCode)
+		return 0, nil, fmt.Errorf("upstream status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	return parseFlexibleBalance(bodyBytes)
 }
 
-// parseFlexibleBalance 兼容解析上游各种变体结构的积分与包明细
+// parseFlexibleBalance 深度解析上游各种变体结构的积分包与赠送/签到余额
 func parseFlexibleBalance(body []byte) (float64, []CreditPackage, error) {
 	var env struct {
 		Code int             `json:"code"`
@@ -160,92 +163,176 @@ func parseFlexibleBalance(body []byte) (float64, []CreditPackage, error) {
 		return 0, nil, fmt.Errorf("upstream code %d: %s", env.Code, env.Msg)
 	}
 
+	var totalCredits float64
+	var packages []CreditPackage
+
+	// 1. 如果 Data 是纯数组 (部分网关直接返回包列表 [ {...}, {...} ])
+	var dataArr []any
+	if err := json.Unmarshal(env.Data, &dataArr); err == nil && len(dataArr) > 0 {
+		packages = extractPackagesFromSlice(dataArr)
+		packageSum := sumPackageCredits(packages)
+		if packageSum > 0 {
+			totalCredits = packageSum
+		}
+		return totalCredits, packages, nil
+	}
+
+	// 2. 如果 Data 是 JSON 对象
 	var dataMap map[string]any
 	if err := json.Unmarshal(env.Data, &dataMap); err != nil {
 		return 0, nil, nil
 	}
 
-	var totalCredits float64
+	// 提取顶层总额与各种赠送/签到额度
+	keysToInspect := []string{
+		"totalCredits", "total_credits",
+		"remainingCredits", "remaining_credits",
+		"giftCredits", "gift_credits",
+		"bonusCredits", "bonus_credits",
+		"checkinCredits", "checkin_credits",
+		"freeCredits", "free_credits",
+		"trialCredits", "trial_credits",
+		"availableCredits", "available_credits",
+		"credits", "balance", "amount", "points",
+	}
 
-	// 1. 尝试从常见字段提取总积分
-	creditKeys := []string{"totalCredits", "total_credits", "remainingCredits", "remaining_credits", "credits", "balance", "availableCredits"}
-	for _, k := range creditKeys {
+	for _, k := range keysToInspect {
 		if val, ok := dataMap[k]; ok {
-			if f, okFloat := val.(float64); okFloat {
+			f := toFloat(val)
+			if f > 0 && f > totalCredits {
 				totalCredits = f
-				break
 			}
 		}
 	}
 
-	// 2. 尝试解析 packages 列表
-	var packages []CreditPackage
-	var rawPackages any
-	for _, k := range []string{"packages", "creditPackages", "credit_packages"} {
-		if val, ok := dataMap[k]; ok {
-			rawPackages = val
-			break
+	// 寻找 packages 嵌套节点 (可能叫 packages, creditPackages, credit_packages, resourcePackages, list)
+	pkgKeys := []string{"packages", "creditPackages", "credit_packages", "resourcePackages", "list", "items"}
+	for _, pk := range pkgKeys {
+		if val, ok := dataMap[pk]; ok {
+			if sliceVal, okSlice := val.([]any); okSlice {
+				pkgs := extractPackagesFromSlice(sliceVal)
+				if len(pkgs) > 0 {
+					packages = append(packages, pkgs...)
+				}
+			}
 		}
 	}
 
-	if rawPackages != nil {
-		pkgBytes, _ := json.Marshal(rawPackages)
-		var parsedPkgs []struct {
-			PackageCode      string  `json:"packageCode"`
-			PackageName      string  `json:"packageName"`
-			RemainingCredits float64 `json:"remainingCredits"`
-			InitialCredits   float64 `json:"initialCredits"`
-			EffectiveTime    int64   `json:"effectiveTime"`
-			ExpireTime       int64   `json:"expireTime"`
-			Status           int     `json:"status"`
-			// 兼容下划线
-			PackageCodeAlt      string  `json:"package_code"`
-			PackageNameAlt      string  `json:"package_name"`
-			RemainingCreditsAlt float64 `json:"remaining_credits"`
-			InitialCreditsAlt   float64 `json:"initial_credits"`
-		}
-
-		if err := json.Unmarshal(pkgBytes, &parsedPkgs); err == nil {
-			var packageSum float64
-			for _, p := range parsedPkgs {
-				code := p.PackageCode
-				if code == "" {
-					code = p.PackageCodeAlt
-				}
-				name := p.PackageName
-				if name == "" {
-					name = p.PackageNameAlt
-				}
-				rem := p.RemainingCredits
-				if rem == 0 {
-					rem = p.RemainingCreditsAlt
-				}
-				initVal := p.InitialCredits
-				if initVal == 0 {
-					initVal = p.InitialCreditsAlt
-				}
-
-				packages = append(packages, CreditPackage{
-					PackageCode:      code,
-					PackageName:      name,
-					RemainingCredits: rem,
-					InitialCredits:   initVal,
-					EffectiveTime:    p.EffectiveTime,
-					ExpireTime:       p.ExpireTime,
-					Status:           p.Status,
-				})
-
-				if rem > 0 {
-					packageSum += rem
+	// 寻找 userResource 嵌套节点
+	if subRes, ok := dataMap["userResource"].(map[string]any); ok {
+		for _, k := range keysToInspect {
+			if val, okVal := subRes[k]; okVal {
+				f := toFloat(val)
+				if f > totalCredits {
+					totalCredits = f
 				}
 			}
-
-			// 如果顶层 totalCredits 为 0 但包明细有积分，则以包积分之和为准
-			if totalCredits == 0 && packageSum > 0 {
-				totalCredits = packageSum
+		}
+		for _, pk := range pkgKeys {
+			if val, okVal := subRes[pk]; okVal {
+				if sliceVal, okSlice := val.([]any); okSlice {
+					packages = append(packages, extractPackagesFromSlice(sliceVal)...)
+				}
 			}
 		}
+	}
+
+	// 累加所有有效积分包余额
+	packageSum := sumPackageCredits(packages)
+	if packageSum > totalCredits {
+		totalCredits = packageSum
+	} else if totalCredits == 0 && packageSum > 0 {
+		totalCredits = packageSum
 	}
 
 	return totalCredits, packages, nil
+}
+
+func extractPackagesFromSlice(slice []any) []CreditPackage {
+	var pkgs []CreditPackage
+	for _, item := range slice {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		name := firstString(m, "packageName", "package_name", "name", "title", "packageType", "type")
+		if name == "" {
+			name = "积分包"
+		}
+
+		code := firstString(m, "packageCode", "package_code", "code", "id")
+		rem := firstFloat(m, "remainingCredits", "remaining_credits", "remaining", "balance", "amount", "credits", "available")
+		initVal := firstFloat(m, "initialCredits", "initial_credits", "initial", "total")
+		effTime := int64(firstFloat(m, "effectiveTime", "effective_time", "start_time", "startTime"))
+		expTime := int64(firstFloat(m, "expireTime", "expire_time", "end_time", "endTime"))
+		status := int(firstFloat(m, "status", "state"))
+		if status == 0 && rem > 0 {
+			status = 1 // 只要剩余积分大于 0，标记为有效
+		}
+
+		pkgs = append(pkgs, CreditPackage{
+			PackageCode:      code,
+			PackageName:      name,
+			RemainingCredits: rem,
+			InitialCredits:   initVal,
+			EffectiveTime:    effTime,
+			ExpireTime:       expTime,
+			Status:           status,
+		})
+	}
+	return pkgs
+}
+
+func sumPackageCredits(packages []CreditPackage) float64 {
+	var sum float64
+	for _, p := range packages {
+		if p.RemainingCredits > 0 {
+			sum += p.RemainingCredits
+		}
+	}
+	return math.Round(sum*1000) / 1000
+}
+
+func toFloat(v any) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case float32:
+		return float64(x)
+	case int:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case json.Number:
+		f, _ := x.Float64()
+		return f
+	case string:
+		f, _ := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		return f
+	default:
+		return 0
+	}
+}
+
+func firstString(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if val, ok := m[k]; ok {
+			if s, okStr := val.(string); okStr && strings.TrimSpace(s) != "" {
+				return strings.TrimSpace(s)
+			}
+		}
+	}
+	return ""
+}
+
+func firstFloat(m map[string]any, keys ...string) float64 {
+	for _, k := range keys {
+		if val, ok := m[k]; ok {
+			if f := toFloat(val); f != 0 {
+				return f
+			}
+		}
+	}
+	return 0
 }

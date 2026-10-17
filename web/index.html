@@ -12,43 +12,44 @@
       <div class="logo-area">
         <div class="logo-icon">WB</div>
         <div>
-          <h1>WorkBuddy AI 控制台</h1>
-          <p style="color:var(--text-muted);font-size:12px">CLIProxyAPI 企业级双区多账号高可用代理插件</p>
+          <h1 data-i18n="title">WorkBuddy AI 控制台</h1>
+          <p style="color:var(--text-muted);font-size:12px" data-i18n="subtitle">CLIProxyAPI 企业级双区多账号高可用代理插件</p>
         </div>
       </div>
       <div class="header-actions">
-        <button id="btn-refresh-all" class="btn-secondary">🔄 刷新数据</button>
-        <button id="btn-open-login" class="btn-primary">⚡ 扫码 / OAuth 登录</button>
-        <button id="btn-open-import" class="btn-secondary">➕ 导入 Token</button>
-        <button id="btn-set-key" class="btn-secondary" title="配置 CPA 宿主 Management Key">🔑 鉴权设置</button>
+        <button id="btn-toggle-lang" class="btn-secondary" title="切换语言 / Switch Language">🌐 <span id="lang-label">English</span></button>
+        <button id="btn-refresh-all" class="btn-secondary" data-i18n="btn_refresh_all">🔄 刷新数据</button>
+        <button id="btn-open-login" class="btn-primary" data-i18n="btn_open_login">⚡ 扫码 / OAuth 登录</button>
+        <button id="btn-open-import" class="btn-secondary" data-i18n="btn_open_import">➕ 导入 Token</button>
+        <button id="btn-set-key" class="btn-secondary" title="配置 CPA 宿主 Management Key" data-i18n="btn_set_key">🔑 鉴权设置</button>
       </div>
     </header>
 
     <!-- 聚合指标总览 -->
     <div class="metrics-grid">
       <div class="metric-card">
-        <div class="metric-title">今日请求总量</div>
+        <div class="metric-title" data-i18n="stat_requests_title">今日请求总量</div>
         <div class="metric-value" id="stat-requests">0</div>
       </div>
       <div class="metric-card">
-        <div class="metric-title">总消耗 Tokens</div>
+        <div class="metric-title" data-i18n="stat_tokens_title">总消耗 Tokens</div>
         <div class="metric-value" id="stat-tokens">0</div>
       </div>
       <div class="metric-card">
-        <div class="metric-title">Prompt 缓存命中率</div>
+        <div class="metric-title" data-i18n="stat_cache_title">Prompt 缓存命中率</div>
         <div class="metric-value" id="stat-cache">0.0%</div>
       </div>
       <div class="metric-card">
-        <div class="metric-title">累计扣除 Credits</div>
+        <div class="metric-title" data-i18n="stat_credits_title">累计扣除 Credits</div>
         <div class="metric-value" id="stat-credits-spent">0.000</div>
       </div>
     </div>
 
     <!-- 标签切换导航 -->
     <div class="tabs-nav">
-      <button class="tab-btn active" data-tab="accounts">账号池管理</button>
-      <button class="tab-btn" data-tab="models">模型目录与探测</button>
-      <button class="tab-btn" data-tab="settings">运行配置</button>
+      <button class="tab-btn active" data-tab="accounts" data-i18n="tab_accounts">账号池管理</button>
+      <button class="tab-btn" data-tab="models" data-i18n="tab_models">模型目录与探测</button>
+      <button class="tab-btn" data-tab="settings" data-i18n="tab_settings">运行配置</button>
     </div>
 
     <!-- Tab 1: 账号池管理 -->
@@ -58,12 +59,12 @@
           <table>
             <thead>
               <tr>
-                <th>账号信息 / UID</th>
-                <th>区域分类</th>
-                <th>积分余额 (Credits)</th>
-                <th>活跃并发</th>
-                <th>健康状态</th>
-                <th>操作</th>
+                <th data-i18n="th_acc_info">账号信息 / UID</th>
+                <th data-i18n="th_realm">区域分类</th>
+                <th data-i18n="th_credits">积分余额 (Credits)</th>
+                <th data-i18n="th_slots">活跃并发</th>
+                <th data-i18n="th_status">健康状态</th>
+                <th data-i18n="th_actions">操作</th>
               </tr>
             </thead>
             <tbody id="accounts-tbody">
@@ -78,20 +79,20 @@
     <div class="tab-pane" id="tab-models" style="display:none">
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <p style="color:var(--text-muted);font-size:13px">已遍历当前账号池，展示各账号实际授权与可见的模型清单：</p>
-          <button id="btn-refresh-models" class="btn-secondary btn-sm">🔄 重新探测可用模型</button>
+          <p style="color:var(--text-muted);font-size:13px" data-i18n="models_tip">已遍历当前账号池，展示各账号实际授权与可见的模型清单：</p>
+          <button id="btn-refresh-models" class="btn-secondary btn-sm" data-i18n="btn_probe_models">🔄 重新探测可用模型</button>
         </div>
         <div class="table-wrapper">
           <table>
             <thead>
               <tr>
-                <th>模型标识 (Model ID)</th>
-                <th>显示名称</th>
-                <th>所属区域</th>
-                <th>可用账号来源</th>
-                <th>厂商</th>
-                <th>费率倍率</th>
-                <th>操作</th>
+                <th data-i18n="th_model_id">模型标识 (Model ID)</th>
+                <th data-i18n="th_model_name">显示名称</th>
+                <th data-i18n="th_model_realm">所属区域</th>
+                <th data-i18n="th_model_source">可用账号来源</th>
+                <th data-i18n="th_model_vendor">厂商</th>
+                <th data-i18n="th_model_rate">费率倍率</th>
+                <th data-i18n="th_model_actions">操作</th>
               </tr>
             </thead>
             <tbody id="models-tbody">
@@ -105,17 +106,17 @@
     <!-- Tab 3: 运行配置 -->
     <div class="tab-pane" id="tab-settings" style="display:none">
       <div class="card">
-        <h3 style="margin-bottom:16px">核心参数设置</h3>
-        <p style="color:var(--text-muted);margin-bottom:12px;font-size:13px">
+        <h3 style="margin-bottom:16px" data-i18n="settings_title">核心参数设置</h3>
+        <p style="color:var(--text-muted);margin-bottom:12px;font-size:13px" data-i18n="settings_desc">
           参数已从 <code>config.yaml</code> 加载并生效。
         </p>
         <ul style="color:var(--text-muted);font-size:13px;line-height:1.8;padding-left:20px">
-          <li><strong>CPA 接口兼容</strong>：全兼容 CPA v6 / v7 / v8，支持标准 C ABI 与独立 CLI 代理</li>
-          <li><strong>国际区每日 30 积分打卡</strong>：已启用 (08:00/12:00/16:00/20:00 4-Tick)</li>
-          <li><strong>国内区每日 100 积分签到</strong>：已启用 (09:00/21:00 2-Tick)</li>
-          <li><strong>单账号并发准入控制</strong>：最大 2 槽位 (防封控)</li>
-          <li><strong>软会话粘性 (Affinity)</strong>：已开启 (持续保护 Prompt Cache)</li>
-          <li><strong>路由前缀</strong>：国内区 <code>cn/</code>，国际区 <code>cb/</code>、<code>en/</code>、<code>wb/</code></li>
+          <li data-i18n="cfg_cpa_compat"><strong>CPA 接口兼容</strong>：全兼容 CPA v6 / v7 / v8，支持标准 C ABI 与独立 CLI 代理</li>
+          <li data-i18n="cfg_bonus_global"><strong>国际区每日 30 积分打卡</strong>：已启用 (08:00/12:00/16:00/20:00 4-Tick)</li>
+          <li data-i18n="cfg_checkin_cn"><strong>国内区每日 100 积分签到</strong>：已启用 (09:00/21:00 2-Tick)</li>
+          <li data-i18n="cfg_max_slots"><strong>单账号并发准入控制</strong>：最大 2 槽位 (防封控)</li>
+          <li data-i18n="cfg_affinity"><strong>软会话粘性 (Affinity)</strong>：已开启 (持续保护 Prompt Cache)</li>
+          <li data-i18n="cfg_prefix"><strong>路由前缀</strong>：国内区 <code>cn/</code>，国际区 <code>cb/</code>、<code>en/</code>、<code>wb/</code></li>
         </ul>
       </div>
     </div>
@@ -125,29 +126,29 @@
   <div class="modal" id="modal-login">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>WorkBuddy 授权登录</h3>
+        <h3 data-i18n="modal_login_title">WorkBuddy 授权登录</h3>
         <button id="btn-close-login" style="background:none;color:var(--text-muted);font-size:18px">✕</button>
       </div>
       <div class="form-group">
-        <label>选择登录区域与服务</label>
+        <label data-i18n="modal_login_select_label">选择登录区域与服务</label>
         <select id="login-realm">
-          <option value="global">国际区 WorkBuddy AI (codebuddy.ai / Google / GitHub / 邮箱)</option>
-          <option value="cn">国内区 CodeBuddy (copilot.tencent.com / 微信 / 手机扫码)</option>
+          <option value="global" data-i18n="opt_realm_global">国际区 WorkBuddy AI (codebuddy.ai / Google / GitHub / 邮箱)</option>
+          <option value="cn" data-i18n="opt_realm_cn">国内区 CodeBuddy (copilot.tencent.com / 微信 / 手机扫码)</option>
         </select>
       </div>
       <div style="margin-top:12px;margin-bottom:16px">
-        <button id="btn-start-login" class="btn-primary" style="width:100%;justify-content:center">⚡ 获取授权链接</button>
+        <button id="btn-start-login" class="btn-primary" style="width:100%;justify-content:center" data-i18n="btn_fetch_auth_link">⚡ 获取授权链接</button>
       </div>
 
       <div id="login-active-box" style="display:none;background:var(--bg-primary);padding:14px;border-radius:6px;border:1px solid var(--border-color)">
-        <p style="color:var(--text-muted);font-size:12px;margin-bottom:8px">授权链接已生成，请在新标签页中完成认证：</p>
+        <p style="color:var(--text-muted);font-size:12px;margin-bottom:8px" data-i18n="login_active_tip">授权链接已生成，请在新标签页中完成认证：</p>
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <a id="login-auth-link" href="#" target="_blank" class="btn-primary" style="text-decoration:none;font-size:12px;padding:6px 12px">🌐 打开登录页</a>
-          <button id="btn-copy-auth-link" class="btn-secondary btn-sm">复制链接</button>
+          <a id="login-auth-link" href="#" target="_blank" class="btn-primary" style="text-decoration:none;font-size:12px;padding:6px 12px" data-i18n="btn_open_login_tab">🌐 打开登录页</a>
+          <button id="btn-copy-auth-link" class="btn-secondary btn-sm" data-i18n="btn_copy_auth_link">复制链接</button>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
           <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--warning)" id="login-indicator"></span>
-          <span id="login-status-label" style="font-size:12px;color:var(--text-muted)">正在等待扫码 / 授权确认中...</span>
+          <span id="login-status-label" style="font-size:12px;color:var(--text-muted)" data-i18n="login_waiting_label">正在等待扫码 / 授权确认中...</span>
         </div>
       </div>
     </div>
@@ -157,35 +158,35 @@
   <div class="modal" id="modal-import">
     <div class="modal-content">
       <div class="modal-header">
-        <h3>导入 WorkBuddy 账号凭证</h3>
+        <h3 data-i18n="modal_import_title">导入 WorkBuddy 账号凭证</h3>
         <button id="btn-close-import" style="background:none;color:var(--text-muted);font-size:18px">✕</button>
       </div>
       <form id="form-import">
         <div class="form-group">
-          <label>所属区域 (Realm)</label>
+          <label data-i18n="import_label_realm">所属区域 (Realm)</label>
           <select id="import-realm">
-            <option value="global">国际区 (Global / codebuddy.ai)</option>
-            <option value="cn">国内区 (CN / copilot.tencent.com)</option>
+            <option value="global" data-i18n="opt_realm_global">国际区 (Global / codebuddy.ai)</option>
+            <option value="cn" data-i18n="opt_realm_cn">国内区 (CN / copilot.tencent.com)</option>
           </select>
         </div>
         <div class="form-group">
-          <label>Access Token (Bearer JWT) *</label>
+          <label data-i18n="import_label_token">Access Token (Bearer JWT) *</label>
           <input type="text" id="import-token" required placeholder="eyJhbGciOi...">
         </div>
         <div class="form-group">
-          <label>Refresh Token (可选)</label>
+          <label data-i18n="import_label_refresh">Refresh Token (可选)</label>
           <input type="text" id="import-refresh" placeholder="留空则不开启自动刷新">
         </div>
         <div class="form-group">
-          <label>用户 User ID (UID)</label>
+          <label data-i18n="import_label_uid">用户 User ID (UID)</label>
           <input type="text" id="import-uid" placeholder="例如 10086">
         </div>
         <div class="form-group">
-          <label>显示别名 (Nickname)</label>
+          <label data-i18n="import_label_nickname">显示别名 (Nickname)</label>
           <input type="text" id="import-nickname" placeholder="例如 我的主号">
         </div>
         <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px">
-          <button type="submit" class="btn-primary">保存凭证</button>
+          <button type="submit" class="btn-primary" data-i18n="btn_save_import">保存凭证</button>
         </div>
       </form>
     </div>

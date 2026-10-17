@@ -1,3 +1,213 @@
+// =============================================================================
+// 1. i18n 多语言环境自适应系统 (自动与 CPAMP 及 CPA 宿主同步)
+// =============================================================================
+
+const I18N = {
+  "zh-CN": {
+    title: "WorkBuddy AI 控制台",
+    subtitle: "CLIProxyAPI 企业级双区多账号高可用代理插件",
+    btn_refresh_all: "🔄 刷新数据",
+    btn_open_login: "⚡ 扫码 / OAuth 登录",
+    btn_open_import: "➕ 导入 Token",
+    btn_set_key: "🔑 鉴权设置",
+    lang_btn: "English",
+    stat_requests_title: "今日请求总量",
+    stat_tokens_title: "总消耗 Tokens",
+    stat_cache_title: "Prompt 缓存命中率",
+    stat_credits_title: "累计扣除 Credits",
+    tab_accounts: "账号池管理",
+    tab_models: "模型目录与探测",
+    tab_settings: "运行配置",
+    th_acc_info: "账号信息 / UID",
+    th_realm: "区域分类",
+    th_credits: "积分余额 (Credits)",
+    th_slots: "活跃并发",
+    th_status: "健康状态",
+    th_actions: "操作",
+    models_tip: "已遍历当前账号池，展示各账号实际授权与可见的模型清单：",
+    btn_probe_models: "🔄 重新探测可用模型",
+    th_model_id: "模型标识 (Model ID)",
+    th_model_name: "显示名称",
+    th_model_realm: "所属区域",
+    th_model_source: "可用账号来源",
+    th_model_vendor: "厂商",
+    th_model_rate: "费率倍率",
+    th_model_actions: "操作",
+    settings_title: "核心参数设置",
+    settings_desc: "参数已从 config.yaml 加载并生效。",
+    cfg_cpa_compat: "CPA 接口兼容：全兼容 CPA v6 / v7 / v8，支持标准 C ABI 与独立 CLI 代理",
+    cfg_bonus_global: "国际区每日 30 积分打卡：已启用 (08:00/12:00/16:00/20:00 4-Tick)",
+    cfg_checkin_cn: "国内区每日 100 积分签到：已启用 (09:00/21:00 2-Tick)",
+    cfg_max_slots: "单账号并发准入控制：最大 2 槽位 (防封控)",
+    cfg_affinity: "软会话粘性 (Affinity)：已开启 (持续保护 Prompt Cache)",
+    cfg_prefix: "路由前缀：国内区 cn/，国际区 cb/、en/、wb/",
+    modal_login_title: "WorkBuddy 授权登录",
+    modal_login_select_label: "选择登录区域与服务",
+    opt_realm_global: "国际区 WorkBuddy AI (codebuddy.ai / Google / GitHub / 邮箱)",
+    opt_realm_cn: "国内区 CodeBuddy (copilot.tencent.com / 微信 / 手机扫码)",
+    btn_fetch_auth_link: "⚡ 获取授权链接",
+    login_active_tip: "授权链接已生成，请在新标签页中完成认证：",
+    btn_open_login_tab: "🌐 打开登录页",
+    btn_copy_auth_link: "复制链接",
+    login_waiting_label: "正在等待扫码 / 授权确认中...",
+    modal_import_title: "导入 WorkBuddy 账号凭证",
+    import_label_realm: "所属区域 (Realm)",
+    import_label_token: "Access Token (Bearer JWT) *",
+    import_label_refresh: "Refresh Token (可选)",
+    import_label_uid: "用户 User ID (UID)",
+    import_label_nickname: "显示别名 (Nickname)",
+    btn_save_import: "保存凭证",
+    btn_daily_report: "Daily Report",
+    btn_checkin: "Check In",
+    btn_refresh: "Refresh",
+    btn_delete: "Delete",
+    btn_test: "Test Ping",
+    msg_loading_accounts: "正在加载账号池...",
+    msg_no_accounts: "当前未发现账号凭证，请点击「扫码 / OAuth 登录」或「导入 Token」添加。",
+    msg_probing_models: "正在遍历当前账号并探测可用模型...",
+    msg_no_models: "当前账号池暂无可用的模型。请先在「账号池管理」中添加或扫码登录账号。",
+    tip_claim_hint: "可点击右侧 Check In 领取今日 100 积分",
+    alert_refresh_ok: "刷新成功！当前可用总积分: ",
+    alert_checkin_ok: "签到成功！已领取每日积分奖励: "
+  },
+  "en": {
+    title: "WorkBuddy AI Console",
+    subtitle: "Enterprise Dual-Realm Multi-Account High-Availability CPA Plugin",
+    btn_refresh_all: "🔄 Refresh Data",
+    btn_open_login: "⚡ Scan / OAuth Login",
+    btn_open_import: "➕ Import Token",
+    btn_set_key: "🔑 Auth Settings",
+    lang_btn: "简体中文",
+    stat_requests_title: "TODAY'S REQUESTS",
+    stat_tokens_title: "TOTAL TOKENS",
+    stat_cache_title: "PROMPT CACHE HIT RATE",
+    stat_credits_title: "TOTAL CREDITS SPENT",
+    tab_accounts: "Account Pool",
+    tab_models: "Models & Probing",
+    tab_settings: "Settings",
+    th_acc_info: "Account / UID",
+    th_realm: "Realm",
+    th_credits: "Credit Balance",
+    th_slots: "Active Slots",
+    th_status: "Status",
+    th_actions: "Actions",
+    models_tip: "Active account pool models dynamically probed and authorized:",
+    btn_probe_models: "🔄 Re-probe Usable Models",
+    th_model_id: "Model ID",
+    th_model_name: "Display Name",
+    th_model_realm: "Realm",
+    th_model_source: "Account Source",
+    th_model_vendor: "Vendor",
+    th_model_rate: "Multiplier",
+    th_model_actions: "Actions",
+    settings_title: "Core Configuration",
+    settings_desc: "Configuration loaded and active from config.yaml.",
+    cfg_cpa_compat: "CPA Compatibility: Full CPA v6/v7/v8 support with C ABI & Standalone CLI",
+    cfg_bonus_global: "Global Daily 30-Credit Report: Enabled (08:00/12:00/16:00/20:00 4-Tick)",
+    cfg_checkin_cn: "CN Daily 100-Credit Check-in: Enabled (09:00/21:00 2-Tick)",
+    cfg_max_slots: "Admission Gate: Max 2 slots/account (Anti-Abuse Protection)",
+    cfg_affinity: "Soft Session Affinity: Enabled (Prompt Cache Preserved)",
+    cfg_prefix: "Routing Prefixes: CN realm cn/, Global realm cb/, en/, wb/",
+    modal_login_title: "WorkBuddy Authorization Login",
+    modal_login_select_label: "Select Login Realm & Service",
+    opt_realm_global: "Global WorkBuddy AI (codebuddy.ai / Google / GitHub / Email)",
+    opt_realm_cn: "Domestic CodeBuddy (copilot.tencent.com / WeChat / Phone)",
+    btn_fetch_auth_link: "⚡ Get Auth Link",
+    login_active_tip: "Authorization link generated. Please authenticate in the new tab:",
+    btn_open_login_tab: "🌐 Open Login Tab",
+    btn_copy_auth_link: "Copy Link",
+    login_waiting_label: "Awaiting scan / authorization confirmation...",
+    modal_import_title: "Import WorkBuddy Credentials",
+    import_label_realm: "Realm",
+    import_label_token: "Access Token (Bearer JWT) *",
+    import_label_refresh: "Refresh Token (Optional)",
+    import_label_uid: "User ID (UID)",
+    import_label_nickname: "Display Nickname",
+    btn_save_import: "Save Credentials",
+    btn_daily_report: "Daily Report",
+    btn_checkin: "Check In",
+    btn_refresh: "Refresh",
+    btn_delete: "Delete",
+    btn_test: "Test Ping",
+    msg_loading_accounts: "Loading account pool...",
+    msg_no_accounts: "No accounts found. Click 'Scan / OAuth Login' or 'Import Token' to add.",
+    msg_probing_models: "Iterating through active accounts and probing usable models...",
+    msg_no_models: "No usable models found for current account pool. Please add an account first.",
+    tip_claim_hint: "Click Check In to claim today's 100 credits",
+    alert_refresh_ok: "Refresh successful! Total available credits: ",
+    alert_checkin_ok: "Check-in successful! Awarded credits: "
+  }
+};
+
+let currentLang = "zh-CN";
+
+function detectLanguage() {
+  // 1. 尝试从父窗口 (CPAMP) 的 html lang 属性或 storage 中嗅探
+  try {
+    const parentLang = window.parent?.document?.documentElement?.lang;
+    if (parentLang) {
+      if (parentLang.toLowerCase().startsWith("en")) return "en";
+      if (parentLang.toLowerCase().startsWith("zh")) return "zh-CN";
+    }
+
+    const parentStored = window.parent?.localStorage?.getItem("cli-proxy-language");
+    if (parentStored) {
+      if (parentStored.includes("en")) return "en";
+      if (parentStored.includes("zh")) return "zh-CN";
+    }
+  } catch (e) {}
+
+  // 2. 检查本地存储
+  try {
+    const localStored = localStorage.getItem("cli-proxy-language");
+    if (localStored) {
+      if (localStored.includes("en")) return "en";
+      if (localStored.includes("zh")) return "zh-CN";
+    }
+  } catch (e) {}
+
+  // 3. 检查当前页面属性或浏览器默认
+  const navLang = navigator.language || "zh-CN";
+  return navLang.toLowerCase().startsWith("zh") ? "zh-CN" : "en";
+}
+
+function t(key, fallback = "") {
+  const dict = I18N[currentLang] || I18N["zh-CN"];
+  return dict[key] || fallback || key;
+}
+
+function applyLanguage(lang) {
+  if (lang !== "zh-CN" && lang !== "en") {
+    lang = "en";
+  }
+  currentLang = lang;
+  document.documentElement.lang = lang;
+
+  const dict = I18N[lang] || I18N["zh-CN"];
+
+  // 批量替换 DOM 中的 data-i18n
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    if (dict[key]) {
+      el.innerText = dict[key];
+    }
+  });
+
+  // 更新语言按钮提示
+  const langLabel = document.getElementById("lang-label");
+  if (langLabel) {
+    langLabel.innerText = dict["lang_btn"] || (lang === "zh-CN" ? "English" : "简体中文");
+  }
+
+  // 重新渲染列表以更新表格内部文字
+  loadAccounts();
+  loadModels();
+}
+
+// =============================================================================
+// 2. API 通信与鉴权管理
+// =============================================================================
+
 function getApiBase() {
   const p = window.location.pathname;
   if (p.includes('/v0/resource/plugins/workbuddyai') || p.includes('/v0/management/workbuddyai')) {
@@ -60,6 +270,35 @@ let pollTimer = null;
 let activeAuthURL = "";
 
 document.addEventListener("DOMContentLoaded", () => {
+  // 1. 初始化多语言
+  currentLang = detectLanguage();
+  applyLanguage(currentLang);
+
+  // 监听父级 CPAMP 语言切换
+  try {
+    window.addEventListener("storage", (e) => {
+      if (e.key === "cli-proxy-language") {
+        applyLanguage(detectLanguage());
+      }
+    });
+
+    if (window.parent && window.parent.document && window.parent.document.documentElement) {
+      const observer = new MutationObserver(() => {
+        const pLang = detectLanguage();
+        if (pLang !== currentLang) {
+          applyLanguage(pLang);
+        }
+      });
+      observer.observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ["lang"] });
+    }
+  } catch (e) {}
+
+  document.getElementById("btn-toggle-lang").addEventListener("click", () => {
+    const nextLang = currentLang === "zh-CN" ? "en" : "zh-CN";
+    try { localStorage.setItem("cli-proxy-language", nextLang); } catch (e) {}
+    applyLanguage(nextLang);
+  });
+
   initTabs();
   loadStats();
   loadAccounts();
@@ -147,14 +386,14 @@ async function loadStats() {
 
 async function loadAccounts() {
   const tbody = document.getElementById("accounts-tbody");
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading accounts...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">${t("msg_loading_accounts")}</td></tr>`;
 
   try {
     const res = await apiFetch(`${API_BASE}/accounts`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
       if (json.data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">No accounts found in auths/. Click "扫码 / OAuth 登录" to add.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">${t("msg_no_accounts")}</td></tr>`;
         return;
       }
       tbody.innerHTML = "";
@@ -171,22 +410,42 @@ async function loadAccounts() {
 
         const slotBadge = `<span class="badge badge-slot">${acc.in_flight_slots}/2</span>`;
 
+        // 细分解析积分明细 (赠送积分、签到积分、试用积分等)
+        let packageBreakdownHTML = "";
+        if (acc.credit_packages && acc.credit_packages.length > 0) {
+          const breakdownItems = [];
+          acc.credit_packages.forEach(p => {
+            if (p.remainingCredits > 0) {
+              const pName = p.packageName || "积分包";
+              breakdownItems.push(`${pName}: ${p.remainingCredits.toFixed(1)}`);
+            }
+          });
+          if (breakdownItems.length > 0) {
+            packageBreakdownHTML = `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${breakdownItems.join(" | ")}</div>`;
+          }
+        }
+
+        if (acc.credits === 0 && acc.realm === "cn" && !packageBreakdownHTML) {
+          packageBreakdownHTML = `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">${t("tip_claim_hint")}</div>`;
+        }
+
         tr.innerHTML = `
           <td><strong>${acc.nickname || acc.id}</strong><br><small style="color:var(--text-muted)">${acc.user_id}</small></td>
           <td>${realmBadge}</td>
           <td>
             <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: ${Math.min(acc.credits, 100)}%"></div></div>
             <strong>${acc.credits.toFixed(1)}</strong>
+            ${packageBreakdownHTML}
           </td>
           <td>${slotBadge}</td>
           <td>${statusBadge}</td>
           <td>
             <div style="display:flex;gap:4px">
               ${acc.realm === "global"
-                ? `<button class="btn-secondary btn-sm" onclick="reportBonus('${acc.id}')">Daily Report</button>`
-                : `<button class="btn-secondary btn-sm" onclick="doCheckin('${acc.id}')">Check In</button>`}
-              <button class="btn-secondary btn-sm" onclick="refreshAccount('${acc.id}')">Refresh</button>
-              <button class="btn-secondary btn-sm" style="color:var(--danger)" onclick="deleteAccount('${acc.id}')">Delete</button>
+                ? `<button class="btn-secondary btn-sm" onclick="reportBonus('${acc.id}')">${t("btn_daily_report")}</button>`
+                : `<button class="btn-secondary btn-sm" onclick="doCheckin('${acc.id}')">${t("btn_checkin")}</button>`}
+              <button class="btn-secondary btn-sm" onclick="refreshAccount('${acc.id}')">${t("btn_refresh")}</button>
+              <button class="btn-secondary btn-sm" style="color:var(--danger)" onclick="deleteAccount('${acc.id}')">${t("btn_delete")}</button>
             </div>
           </td>
         `;
@@ -200,14 +459,14 @@ async function loadAccounts() {
 
 async function loadModels() {
   const tbody = document.getElementById("models-tbody");
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">正在遍历当前账号并探测可用模型...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${t("msg_probing_models")}</td></tr>`;
 
   try {
     const res = await apiFetch(`${API_BASE}/models`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
       if (json.data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">当前账号池暂无可用的模型。请先在「账号池管理」中添加或扫码登录账号。</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${t("msg_no_models")}</td></tr>`;
         return;
       }
       tbody.innerHTML = "";
@@ -224,7 +483,7 @@ async function loadModels() {
           <td>${accs}</td>
           <td>${m.vendor}</td>
           <td>x${(m.creditMultiplier || 1.0).toFixed(2)}</td>
-          <td><button class="btn-secondary btn-sm" onclick="testModel('${m.id}')">Test Ping</button></td>
+          <td><button class="btn-secondary btn-sm" onclick="testModel('${m.id}')">${t("btn_test")}</button></td>
         `;
         tbody.appendChild(tr);
       });
@@ -255,7 +514,11 @@ async function doCheckin(id) {
       body: JSON.stringify({ id })
     });
     const json = await res.json();
-    alert(json.message || "Checkin completed!");
+    if (json.code === 0) {
+      alert(t("alert_checkin_ok") + (json.reward_credits || 100));
+    } else {
+      alert("Checkin response: " + (json.error || json.message));
+    }
     loadAccounts();
   } catch (e) {
     alert("Checkin failed: " + e.message);
@@ -269,6 +532,11 @@ async function refreshAccount(id) {
       body: JSON.stringify({ id })
     });
     const json = await res.json();
+    if (json.code === 0 && json.data) {
+      alert(t("alert_refresh_ok") + (json.data.credits !== undefined ? json.data.credits : "N/A"));
+    } else {
+      alert("Refresh: " + (json.error || json.message));
+    }
     loadAccounts();
   } catch (e) {
     alert("Refresh failed: " + e.message);
@@ -345,7 +613,7 @@ async function handleStartLogin() {
     });
     const json = await res.json();
     btn.disabled = false;
-    btn.innerText = "⚡ 获取授权链接";
+    btn.innerText = t("btn_fetch_auth_link");
 
     if (json.code === 0 && json.data) {
       const { state, authUrl } = json.data;
@@ -353,7 +621,7 @@ async function handleStartLogin() {
 
       document.getElementById("login-active-box").style.display = "block";
       document.getElementById("login-auth-link").href = authUrl;
-      document.getElementById("login-status-label").innerText = "等待授权中，请在打开的页面中完成登录...";
+      document.getElementById("login-status-label").innerText = t("login_waiting_label");
       document.getElementById("login-indicator").style.background = "var(--warning)";
 
       // 自动新窗口打开
@@ -390,7 +658,7 @@ async function handleStartLogin() {
     }
   } catch (err) {
     btn.disabled = false;
-    btn.innerText = "⚡ 获取授权链接";
+    btn.innerText = t("btn_fetch_auth_link");
     alert("请求错误: " + err.message);
   }
 }
