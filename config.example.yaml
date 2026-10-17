@@ -1,34 +1,81 @@
-# CLIProxyAPI 宿主配置文件样例 (嵌入 WorkBuddy AI 插件)
+# ==============================================================================
+# CLIProxyAPI (CPA) 宿主配置文件样例 (嵌入 WorkBuddy AI 插件)
+# ==============================================================================
+#
+# 【文件放置位置说明】：
+# 本文件是 CLIProxyAPI 宿主服务（cli-proxy-api.exe）的核心配置文件！
+# 1. 放置路径：直接重命名为 config.yaml，并放在与 cli-proxy-api.exe 同级的目录下；
+#    目录结构示意：
+#    cli-proxy-api-root/
+#    ├── cli-proxy-api.exe          <-- CPA 宿主主执行程序
+#    ├── config.yaml                <-- 本文件（重命名并放置在此处）
+#    ├── auths/                     <-- 存放账号凭据的目录
+#    └── plugins/                   <-- 存放插件二进制动态库
+#        └── workbuddy.dll          <-- (Linux 为 workbuddy.so)
+#
+# 2. 如果你本地已经有了现成的 config.yaml：
+#    无需替换现有文件！只需将下方的 [remote-management] 和 [plugins] 两个节点
+#    复制并粘贴到你现有的 config.yaml 对应位置即可。
+#
+# 【关于各项 Key 的说明】：
+# - remote-management.secret-key:
+#   CPA 宿主的远程管理密钥（Management Key）。
+#   当你使用 CPA Manager Plus (CPAMP) 面板连接 CPA 时，要求填写的 Management Key 就是它！
+#   首次配置时可填入你自定义的任意强密码（如 "MyAdminKey123"），CPA 首次启动时会自动将其哈希加密。
+#
+# - api-keys:
+#   客户端（Cursor、Claude Code、VSCode 等）通过 OpenAI / Claude 协议请求模型时携带的 Bearer Token。
+#
+# ==============================================================================
+
+# 服务监听端口
 port: 8317
+
+# 凭据存储目录
 auth-dir: "auths"
 
-# 基础模型请求日志配置
+# 请求日志记录
 request-log: true
+
+# 客户端调用 API Key 列表
+api-keys:
+  - "sk-workbuddy-local-test"
 
 # 远程管理配置 (Management API)
 remote-management:
   allow-remote: true
+  # CPA 管理密钥：CPAMP 连接面板填写的 Management Key 即为此值
   secret-key: "YourSuperSecretManagementKey"
 
 # 插件系统全局配置
 plugins:
   enabled: true
-  # 插件私有配置字典 (key 对应插件的 PluginID: "workbuddy")
+  # 插件专用配置字典 (键名对应插件 ID: "workbuddyai" 或 "workbuddy")
   configs:
-    workbuddy:
-      # 国际区每日 30 积分成长中心自动打卡 (08:00/12:00/16:00/20:00 4-Tick)
+    workbuddyai:
+      # 国际区每日 30 积分成长中心自动打卡 (08:00/12:00/16:00/20:00 4-Tick 巡检)
       daily_bonus: true
       # 国内区每日 100 积分自动签到 (09:00/21:00)
       checkin_auto: true
       # 单账号最大活跃并发数 (严防上游 429 封号，建议 2)
       max_concurrency: 2
-      # 国内区模型路由前缀 (请求 cn/glm-5.3 会强制使用 CN 账号)
+      # 国内区模型路由前缀 (如请求 cn/glm-5.2 强制路由至国内账号)
       cn_prefix: "cn/"
-      # 国际区模型路由前缀 (请求 cb/gpt-6.1-sol 会强制使用 Global 账号)
+      # 国际区模型路由前缀 (如请求 cb/gpt-6-astra 或 en/gpt-6-astra 强制路由至国际账号)
       global_prefix: "cb/"
       # 启用软会话粘性以保护 Prompt Cache，大幅降低 Token 扣费
       session_affinity: true
-      # 是否在日志中记录去隐私的缓存命中追踪指纹 (日常建议 false)
+      # 是否在日志中记录缓存命中追踪 (建议 false)
       cache_trace: false
       # 插件本地数据持久化目录
+      data_dir: ".codebuddy_data"
+
+    # workbuddy 别名兼容配置
+    workbuddy:
+      daily_bonus: true
+      checkin_auto: true
+      max_concurrency: 2
+      cn_prefix: "cn/"
+      global_prefix: "cb/"
+      session_affinity: true
       data_dir: ".codebuddy_data"
