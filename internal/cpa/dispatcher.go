@@ -54,6 +54,8 @@ func GetDispatcher() *Dispatcher {
 
 		// 将管理路由挂载在根、CPA 官方规范及 workbuddyai 别名前缀上
 		management.MountRoutes(engine.Group(""))
+		management.MountRoutes(engine.Group("/v0/management/workbuddy"))
+		management.MountRoutes(engine.Group("/v0/management/workbuddyai"))
 		management.MountRoutes(engine.Group("/v0/management/plugins/workbuddy"))
 		management.MountRoutes(engine.Group("/v0/management/plugins/workbuddyai"))
 		management.MountRoutes(engine.Group("/v0/resource/plugins/workbuddy"))
@@ -706,44 +708,52 @@ func (d *Dispatcher) handleExecutorExecuteStream(ctx context.Context, raw []byte
 // -----------------------------------------------------------------------------
 
 func (d *Dispatcher) handleManagementRegister() ([]byte, error) {
-	// 同时注册 /plugins/workbuddy 与 /plugins/workbuddyai 路由，无缝对接 CPA
+	// 同时注册 /workbuddyai/... 与 /workbuddy/... 路由，无缝对接 CPA 与 CPAMP (避免 head 为 "plugins" 触发 CPAMP admin key 校验)
 	routes := []ManagementRoute{
-		{Method: "GET", Path: "/plugins/workbuddyai/accounts", Description: "获取所有账号及状态"},
-		{Method: "POST", Path: "/plugins/workbuddyai/accounts/import", Description: "导入账号凭据"},
-		{Method: "POST", Path: "/plugins/workbuddyai/accounts/refresh", Description: "刷新账号 Token 与余额"},
-		{Method: "DELETE", Path: "/plugins/workbuddyai/accounts/:id", Description: "删除账号"},
-		{Method: "POST", Path: "/plugins/workbuddyai/actions/dailybonus", Description: "触发国际区 30 积分打卡"},
-		{Method: "POST", Path: "/plugins/workbuddyai/actions/checkin", Description: "触发国内区 100 积分签到"},
-		{Method: "POST", Path: "/plugins/workbuddyai/actions/trial", Description: "激活国际区 250 积分 Expert 权益"},
-		{Method: "GET", Path: "/plugins/workbuddyai/dailybonus/status", Description: "获取今日打卡热力图"},
-		{Method: "POST", Path: "/plugins/workbuddyai/actions/login-start", Description: "启动扫码或OAuth登录"},
-		{Method: "GET", Path: "/plugins/workbuddyai/actions/login-poll", Description: "轮询扫码或OAuth状态"},
-		{Method: "POST", Path: "/plugins/workbuddyai/actions/login-poll", Description: "轮询扫码或OAuth状态"},
-		{Method: "GET", Path: "/plugins/workbuddyai/models", Description: "获取全部模型列表"},
-		{Method: "POST", Path: "/plugins/workbuddyai/models/toggle", Description: "开关模型"},
-		{Method: "POST", Path: "/plugins/workbuddyai/models/test", Description: "测试模型连通性与扣费"},
-		{Method: "GET", Path: "/plugins/workbuddyai/stats", Description: "获取统计概览"},
-		{Method: "GET", Path: "/plugins/workbuddyai/config", Description: "获取配置"},
-		{Method: "POST", Path: "/plugins/workbuddyai/config", Description: "更新配置"},
+		{Method: "GET", Path: "/workbuddyai/accounts", Description: "获取所有账号及状态"},
+		{Method: "POST", Path: "/workbuddyai/accounts/import", Description: "导入账号凭据"},
+		{Method: "POST", Path: "/workbuddyai/accounts/refresh", Description: "刷新账号 Token 与余额"},
+		{Method: "DELETE", Path: "/workbuddyai/accounts/:id", Description: "删除账号"},
+		{Method: "POST", Path: "/workbuddyai/actions/dailybonus", Description: "触发国际区 30 积分打卡"},
+		{Method: "POST", Path: "/workbuddyai/actions/checkin", Description: "触发国内区 100 积分签到"},
+		{Method: "POST", Path: "/workbuddyai/actions/trial", Description: "激活国际区 250 积分 Expert 权益"},
+		{Method: "GET", Path: "/workbuddyai/dailybonus/status", Description: "获取今日打卡热力图"},
+		{Method: "POST", Path: "/workbuddyai/actions/login-start", Description: "启动扫码或OAuth登录"},
+		{Method: "GET", Path: "/workbuddyai/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "POST", Path: "/workbuddyai/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "GET", Path: "/workbuddyai/models", Description: "获取全部模型列表"},
+		{Method: "POST", Path: "/workbuddyai/models/toggle", Description: "开关模型"},
+		{Method: "POST", Path: "/workbuddyai/models/test", Description: "测试模型连通性与扣费"},
+		{Method: "GET", Path: "/workbuddyai/stats", Description: "获取统计概览"},
+		{Method: "GET", Path: "/workbuddyai/config", Description: "获取配置"},
+		{Method: "POST", Path: "/workbuddyai/config", Description: "更新配置"},
 
 		// workbuddy 别名兼容
+		{Method: "GET", Path: "/workbuddy/accounts", Description: "获取所有账号及状态"},
+		{Method: "POST", Path: "/workbuddy/accounts/import", Description: "导入账号凭据"},
+		{Method: "POST", Path: "/workbuddy/accounts/refresh", Description: "刷新账号 Token 与余额"},
+		{Method: "DELETE", Path: "/workbuddy/accounts/:id", Description: "删除账号"},
+		{Method: "POST", Path: "/workbuddy/actions/dailybonus", Description: "触发国际区 30 积分打卡"},
+		{Method: "POST", Path: "/workbuddy/actions/checkin", Description: "触发国内区 100 积分签到"},
+		{Method: "POST", Path: "/workbuddy/actions/trial", Description: "激活国际区 250 积分 Expert 权益"},
+		{Method: "GET", Path: "/workbuddy/dailybonus/status", Description: "获取今日打卡热力图"},
+		{Method: "POST", Path: "/workbuddy/actions/login-start", Description: "启动扫码或OAuth登录"},
+		{Method: "GET", Path: "/workbuddy/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "POST", Path: "/workbuddy/actions/login-poll", Description: "轮询扫码或OAuth状态"},
+		{Method: "GET", Path: "/workbuddy/models", Description: "获取全部模型列表"},
+		{Method: "POST", Path: "/workbuddy/models/toggle", Description: "开关模型"},
+		{Method: "POST", Path: "/workbuddy/models/test", Description: "测试模型连通性与扣费"},
+		{Method: "GET", Path: "/workbuddy/stats", Description: "获取统计概览"},
+		{Method: "GET", Path: "/workbuddy/config", Description: "获取配置"},
+		{Method: "POST", Path: "/workbuddy/config", Description: "更新配置"},
+
+		// 官方 /plugins/... 备用
+		{Method: "GET", Path: "/plugins/workbuddyai/accounts", Description: "获取所有账号及状态"},
+		{Method: "POST", Path: "/plugins/workbuddyai/actions/login-start", Description: "启动扫码或OAuth登录"},
+		{Method: "GET", Path: "/plugins/workbuddyai/actions/login-poll", Description: "轮询扫码或OAuth状态"},
 		{Method: "GET", Path: "/plugins/workbuddy/accounts", Description: "获取所有账号及状态"},
-		{Method: "POST", Path: "/plugins/workbuddy/accounts/import", Description: "导入账号凭据"},
-		{Method: "POST", Path: "/plugins/workbuddy/accounts/refresh", Description: "刷新账号 Token 与余额"},
-		{Method: "DELETE", Path: "/plugins/workbuddy/accounts/:id", Description: "删除账号"},
-		{Method: "POST", Path: "/plugins/workbuddy/actions/dailybonus", Description: "触发国际区 30 积分打卡"},
-		{Method: "POST", Path: "/plugins/workbuddy/actions/checkin", Description: "触发国内区 100 积分签到"},
-		{Method: "POST", Path: "/plugins/workbuddy/actions/trial", Description: "激活国际区 250 积分 Expert 权益"},
-		{Method: "GET", Path: "/plugins/workbuddy/dailybonus/status", Description: "获取今日打卡热力图"},
 		{Method: "POST", Path: "/plugins/workbuddy/actions/login-start", Description: "启动扫码或OAuth登录"},
 		{Method: "GET", Path: "/plugins/workbuddy/actions/login-poll", Description: "轮询扫码或OAuth状态"},
-		{Method: "POST", Path: "/plugins/workbuddy/actions/login-poll", Description: "轮询扫码或OAuth状态"},
-		{Method: "GET", Path: "/plugins/workbuddy/models", Description: "获取全部模型列表"},
-		{Method: "POST", Path: "/plugins/workbuddy/models/toggle", Description: "开关模型"},
-		{Method: "POST", Path: "/plugins/workbuddy/models/test", Description: "测试模型连通性与扣费"},
-		{Method: "GET", Path: "/plugins/workbuddy/stats", Description: "获取统计概览"},
-		{Method: "GET", Path: "/plugins/workbuddy/config", Description: "获取配置"},
-		{Method: "POST", Path: "/plugins/workbuddy/config", Description: "更新配置"},
 	}
 
 	resources := []ResourceRoute{

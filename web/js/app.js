@@ -1,7 +1,10 @@
 function getApiBase() {
   const p = window.location.pathname;
-  if (p.includes('/v0/resource/plugins/')) {
-    return p.replace('/v0/resource/plugins/', '/v0/management/plugins/').replace(/\/ui\/?$/, '');
+  if (p.includes('/v0/resource/plugins/workbuddyai') || p.includes('/v0/management/workbuddyai')) {
+    return '/v0/management/workbuddyai';
+  }
+  if (p.includes('/v0/resource/plugins/workbuddy') || p.includes('/v0/management/workbuddy')) {
+    return '/v0/management/workbuddy';
   }
   return p.replace(/\/ui\/?$/, '');
 }
@@ -9,6 +12,7 @@ function getApiBase() {
 const API_BASE = getApiBase();
 let currentTab = "accounts";
 let pollTimer = null;
+let activeAuthURL = "";
 
 document.addEventListener("DOMContentLoaded", () => {
   initTabs();
@@ -255,8 +259,6 @@ async function handleImportSubmit(e) {
   }
 }
 
-let activeAuthURL = "";
-
 async function handleStartLogin() {
   const realm = document.getElementById("login-realm").value;
   const btn = document.getElementById("btn-start-login");
@@ -264,7 +266,7 @@ async function handleStartLogin() {
   btn.innerText = "正在获取链接...";
 
   try {
-    const res = await fetch(`${API_BASE}/actions/login-start?realm=${realm}`, {
+    const res = await fetch(`${API_BASE}/actions/login-start?realm=${encodeURIComponent(realm)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ realm })
@@ -323,9 +325,13 @@ async function handleStartLogin() {
 
 function handleCopyLink() {
   if (!activeAuthURL) return;
-  navigator.clipboard.writeText(activeAuthURL).then(() => {
-    alert("授权链接已复制到剪贴板！");
-  }).catch(() => {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(activeAuthURL).then(() => {
+      alert("授权链接已复制到剪贴板！");
+    }).catch(() => {
+      prompt("请手动复制授权链接：", activeAuthURL);
+    });
+  } else {
     prompt("请手动复制授权链接：", activeAuthURL);
-  });
+  }
 }
