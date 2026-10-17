@@ -221,24 +221,60 @@ cp bin/workbuddy.dll /path/to/cliproxyapi/plugins/
 
 ### 3. 配置与启动
 
-在 CLIProxyAPI 的 `config.yaml` 中启用插件配置：
+#### 3.1 配置文件说明与放置位置
+> **重点**：配置文件即为 **CLIProxyAPI (CPA) 宿主程序主目录下的 `config.yaml`**（与 `cli-proxy-api.exe` 处于同一目录）。
+> 如果你的 CPA 之前已经在运行，**无需新建或替换文件**，只需打开已有 `config.yaml` 将下方节点合并进去即可。
+
+在 `config.yaml` 中增加或完善如下配置：
 
 ```yaml
+port: 8317
+auth-dir: "auths"
+
+# 客户端调用使用的 API Key
+api-keys:
+  - "sk-workbuddy-local-test"
+
+# 远程管理配置 (CPAMP 面板连接用)
+remote-management:
+  allow-remote: true
+  # 【管理密码说明】：CPA 宿主管理密钥。在 CPA Manager Plus (CPAMP) 中连接 CPA 时填写的 Management Key 即为此值。
+  # 首次可填入自定义明文密码，CPA 启动后会自动将其哈希加密。
+  secret-key: "YourSuperSecretManagementKey"
+
+# 插件配置
 plugins:
   enabled: true
   configs:
-    workbuddy:
-      daily_bonus: true      # 开启国际区每日 30 积分自动打卡
-      checkin_auto: true     # 开启国内区每日 100 积分自动签到
+    workbuddyai:
+      daily_bonus: true      # 开启国际区每日 30 积分自动打卡 (08:00/12:00/16:00/20:00 4-Tick)
+      checkin_auto: true     # 开启国内区每日 100 积分自动签到 (09:00/21:00)
       max_concurrency: 2     # 单账号最大并发数 (建议 2)
-      cn_prefix: "cn/"       # 国内区模型前缀
-      global_prefix: "cb/"   # 国际区模型前缀
+      cn_prefix: "cn/"       # 国内区模型前缀 (如 cn/glm-5.2)
+      global_prefix: "cb/"   # 国际区模型前缀 (如 cb/gpt-6-astra 或 en/gpt-6-astra)
+      session_affinity: true # 启用软会话粘性以保护 Prompt Cache
+      data_dir: ".codebuddy_data" # 插件持久化数据目录
+
+    # 兼容别名
+    workbuddy:
+      daily_bonus: true
+      checkin_auto: true
+      max_concurrency: 2
+      cn_prefix: "cn/"
+      global_prefix: "cb/"
+      session_affinity: true
+      data_dir: ".codebuddy_data"
 ```
 
-启动 CLIProxyAPI：
-```bash
-./cli-proxy-api -config config.yaml
-```
+#### 3.2 启动服务
+- **动态库模式（跟随 CPA 宿主启动）**：
+  ```bash
+  ./cli-proxy-api -config config.yaml
+  ```
+- **独立服务模式（无需 CGO，独立运行 HTTP 反代）**：
+  ```bash
+  ./workbuddy-server.exe -port 8318 -auth-dir ./auths -data-dir ./.codebuddy_data
+  ```
 
 ### 4. 客户端对接示例
 

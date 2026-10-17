@@ -49,46 +49,92 @@ make build-darwin
 
 ## 3. 安装与配置 CLIProxyAPI
 
-### 3.1 放置动态库文件
+### 3.1 放置动态库文件与目录层级
 将编译生成的二进制动态库文件拷贝至 CLIProxyAPI 宿主程序的 `plugins/` 目录中：
 ```text
-cliproxyapi/
-├── cli-proxy-api.exe (或 cli-proxy-api)
-├── config.yaml
-├── auths/
-└── plugins/
-    └── workbuddy.dll  (Linux 为 workbuddy.so，macOS 为 workbuddy.dylib)
+CPA 根目录/ (例如 D:\AILocal\Tools\CLIProxyAPI\Bin\)
+├── cli-proxy-api.exe (或 cli-proxy-api 二进制)
+├── config.yaml       <-- 【核心配置文件就放在这里！】
+├── auths/            <-- 存放账号凭据 JSON 的目录
+└── plugins/          <-- 存放插件二进制动态库
+    └── workbuddy.dll (Linux 为 workbuddy.so，macOS 为 workbuddy.dylib)
 ```
 
-### 3.2 配置 `config.yaml`
-在 CLIProxyAPI 的配置文件 `config.yaml` 中增加或完善如下节点：
+### 3.2 配置文件 `config.yaml` 放置与填法说明
+> **注意**：本配置文件是 **CLIProxyAPI (CPA) 宿主程序的全局主配置文件**，放置在 `cli-proxy-api.exe` 同级目录下。
+> 如果你的 CPA 之前已经在运行，**无需新建文件**，只需打开已有 `config.yaml` 将下方配置节点合并进去即可。
+
+在 `config.yaml` 中完善如下节点：
 
 ```yaml
+# 1. 服务端口与凭据目录
 port: 8317
 auth-dir: "auths"
 
-# 启用插件支持
+# 2. 客户端调用使用的 API Key
+api-keys:
+  - "sk-workbuddy-local-test"
+
+# 3. 远程管理配置 (CPAMP 面板连接用)
+remote-management:
+  allow-remote: true
+  # 【管理密码说明】：
+  # 这是 CPA 宿主的管理密码。当你使用 CPA Manager Plus (CPAMP) 面板连接 CPA 时，
+  # 界面弹窗要求填写的 "Management Key" 就是这个值！
+  # 首次可填入自定义明文密码，CPA 启动后会自动将其哈希加密存储。
+  secret-key: "YourSuperSecretManagementKey"
+
+# 4. 插件系统全局配置
 plugins:
   enabled: true
   configs:
-    workbuddy:
-      daily_bonus: true      # 国际区每日 30 积分自动打卡
-      checkin_auto: true     # 国内区每日 100 积分自动签到
-      max_concurrency: 2     # 单账号最大活跃并发数 (建议 2)
-      cn_prefix: "cn/"       # 前缀路由定义
-      global_prefix: "cb/"
+    workbuddyai:
+      daily_bonus: true      # 国际区每日 30 积分自动打卡 (08:00/12:00/16:00/20:00 4-Tick)
+      checkin_auto: true     # 国内区每日 100 积分自动签到 (09:00/21:00)
+      max_concurrency: 2     # 单账号最大活跃并发数 (严防上游 429 封号，建议 2)
+      cn_prefix: "cn/"       # 前缀路由定义 (请求 cn/glm-5.2 强制国内区)
+      global_prefix: "cb/"   # 国际区路由前缀 (请求 cb/gpt-6-astra 或 en/gpt-6-astra 强制国际区)
       session_affinity: true # 启用软会话粘性以保护 Prompt Cache
+      data_dir: ".codebuddy_data" # 插件持久化数据目录
 
-remote-management:
-  allow-remote: true
-  secret-key: "YourSecretAdminKeyHere"
+    # 兼容别名配置
+    workbuddy:
+      daily_bonus: true
+      checkin_auto: true
+      max_concurrency: 2
+      cn_prefix: "cn/"
+      global_prefix: "cb/"
+      session_affinity: true
+      data_dir: ".codebuddy_data"
 ```
+
+### 3.3 独立服务模式 (Standalone CLI) 部署
+若宿主环境未安装 CGO 编译链，可直接以独立 HTTP 代理服务方式启动：
+```bash
+./workbuddy-server.exe -port 8318 -auth-dir ./auths -data-dir ./.codebuddy_data
+```
+- 直接提供 `/v1/chat/completions` 与 `/v1/models`，支持任意 OpenAI 客户端连接 `http://127.0.0.1:8318/v1`；
+- 直接访问 `http://127.0.0.1:8318/ui` 即可打开内置完整管理面板。
 
 ---
 
-## 4. 添加 WorkBuddy 认证凭据
+## 4. 添加与管理 WorkBuddy 认证凭据
 
-在 CLIProxyAPI 的 `auths/` 目录中创建凭据文件，格式统一为 `workbuddy-<账号标识>-<realm>.json`。
+插件支持通过三种方式轻松接入并管理多账号：
+
+### 4.1 方式一：Web 控制台一键授权（推荐）
+1. 在 CPAMP 点击左侧 **「WorkBuddy 控制台」**；
+2. 点击右上角 **「⚡ 扫码 / OAuth 登录」** 按钮；
+3. 选择 **国际区 WorkBuddy AI** 或 **国内区 CodeBuddy**，点击 **获取授权链接**；
+4. 浏览器将自动弹窗打开官方认证页，登录成功后插件后台自动拉取凭据、查询余额并加入账号池。
+
+### 4.2 方式二：CPAMP「OAuth 登录」面板
+1. 打开 CPAMP 左侧 **「OAuth 登录」** 导航菜单；
+2. 列表中将自动出现 **WorkBuddy AI** 插件卡片；
+3. 点击 **「开始 WorkBuddy AI 登录」**，在新标签页完成认证即可。
+
+### 4.3 方式三：手动放置 JSON 凭据文件
+在 CLIProxyAPI 的 `auths/` 目录中创建或导入凭据文件，支持标准单账号与多账号数组：
 
 ### 4.1 国际区账号样例 (`auths/workbuddy-01-intl.json`)
 ```json

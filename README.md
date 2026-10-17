@@ -159,24 +159,56 @@ cp bin/workbuddy.dll /path/to/cliproxyapi/plugins/
 
 ### 3. Configuration
 
-Add the plugin stanza in `config.yaml`:
+The configuration file is **CLIProxyAPI's own `config.yaml`**, located in the root folder alongside `cli-proxy-api.exe`. If you already have an existing `config.yaml`, simply merge the following snippet into it:
 
 ```yaml
+port: 8317
+auth-dir: "auths"
+
+# API keys for client access
+api-keys:
+  - "sk-workbuddy-local-test"
+
+# Remote management configuration (used by CPAMP)
+remote-management:
+  allow-remote: true
+  # CPA Management Key: Enter this key when connecting from CPA Manager Plus (CPAMP)
+  secret-key: "YourSuperSecretManagementKey"
+
+# Plugin configuration
 plugins:
   enabled: true
   configs:
+    workbuddyai:
+      daily_bonus: true      # Global 30-credit daily report (08:00/12:00/16:00/20:00 4-Tick)
+      checkin_auto: true     # CN 100-credit daily check-in (09:00/21:00)
+      max_concurrency: 2     # Max active concurrency per account (recommended: 2)
+      cn_prefix: "cn/"       # CN realm prefix (e.g. cn/glm-5.2)
+      global_prefix: "cb/"   # Global realm prefix (e.g. cb/gpt-6-astra or en/gpt-6-astra)
+      session_affinity: true # Preserves Prompt Cache hotness
+      data_dir: ".codebuddy_data"
+
+    # Compatibility alias
     workbuddy:
       daily_bonus: true
       checkin_auto: true
       max_concurrency: 2
       cn_prefix: "cn/"
       global_prefix: "cb/"
+      session_affinity: true
+      data_dir: ".codebuddy_data"
 ```
 
-Start CLIProxyAPI:
-```bash
-./cli-proxy-api -config config.yaml
-```
+### 4. Running the Service
+
+- **Dynamic Shared Library Mode (inside CPA host)**:
+  ```bash
+  ./cli-proxy-api -config config.yaml
+  ```
+- **Standalone CLI Proxy Mode (no CGO required)**:
+  ```bash
+  ./workbuddy-server.exe -port 8318 -auth-dir ./auths -data-dir ./.codebuddy_data
+  ```
 
 ---
 
