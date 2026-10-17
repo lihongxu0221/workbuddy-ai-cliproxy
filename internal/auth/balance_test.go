@@ -5,7 +5,6 @@ import (
 )
 
 func TestParseSummaryResponse(t *testing.T) {
-	// 官方 get-user-resource-summary 结构样例 (带套餐名称与精确余额 328.84)
 	summaryJSON := `{
 		"code": 0,
 		"msg": "success",
@@ -18,7 +17,7 @@ func TestParseSummaryResponse(t *testing.T) {
 					"PackageCode": "TCACA_free_monthly_001",
 					"PackageName": "月度免费配额",
 					"CycleTotalCapacity": 1000.0,
-					"CycleRemainCapacity": 328.84,
+					"CycleRemainCapacity": "328.84",
 					"CycleUsedCapacity": 671.16
 				}
 			]
@@ -44,25 +43,25 @@ func TestParseSummaryResponse(t *testing.T) {
 }
 
 func TestParsePackagesResponse(t *testing.T) {
-	// 官方 get-user-resource-free-packages 结构样例
+	// 官方 get-user-resource-free-packages 结构样例 (CapacityType: 4, 字符串数值 "328.84")
 	freeJSON := `{
 		"code": 0,
 		"data": {
-			"TotalCount": 2,
+			"TotalCount": 1,
 			"Accounts": [
 				{
-					"ResourceId": "res-bonus-01",
+					"ResourceId": "res-slice-01",
 					"PackageCode": "TCACA_bonus_30",
 					"PackageName": "平台奖励积分 (Bonus Pack)",
-					"CycleCapacityRemainPrecise": 30.0,
-					"CycleCapacitySizePrecise": 30.0
-				},
-				{
-					"ResourceId": "res-checkin-02",
-					"PackageCode": "TCACA_checkin_100",
-					"PackageName": "每日签到奖励",
-					"CycleCapacityRemainPrecise": 100.0,
-					"CycleCapacitySizePrecise": 100.0
+					"CapacityType": 4,
+					"CycleCapacityRemainPrecise": "0.0",
+					"CycleCapacitySizePrecise": "1000.0",
+					"SlicePeriodUsageDetails": [
+						{
+							"SlicePeriodCapacityRemainPrecise": "328.84",
+							"SlicePeriodCapacitySizePrecise": "1000.0"
+						}
+					]
 				}
 			]
 		}
@@ -73,12 +72,12 @@ func TestParsePackagesResponse(t *testing.T) {
 		t.Fatalf("parsePackagesResponse failed: %v", err)
 	}
 
-	if credits != 130.0 {
-		t.Errorf("expected total credits 130.0, got %f", credits)
+	if credits != 328.84 {
+		t.Errorf("expected total credits 328.84 from SlicePeriod, got %f", credits)
 	}
 
-	if len(pkgs) != 2 {
-		t.Errorf("expected 2 packages, got %d", len(pkgs))
+	if len(pkgs) != 1 || pkgs[0].RemainingCredits != 328.84 {
+		t.Errorf("expected 1 package with 328.84, got %v", pkgs)
 	}
 }
 
@@ -87,18 +86,18 @@ func TestParseFlexibleBalance(t *testing.T) {
 	json1 := `{
 		"code": 0,
 		"data": {
-			"totalCredits": 280.5,
+			"totalCredits": "280.5",
 			"packages": [
 				{
 					"packageCode": "pkg-01",
 					"packageName": "平台奖励积分 (Bonus Pack)",
-					"remainingCredits": 30.0,
+					"remainingCredits": "30.0",
 					"status": 1
 				},
 				{
 					"packageCode": "pkg-02",
 					"packageName": "每日签到奖励",
-					"remainingCredits": 100.0,
+					"remainingCredits": "100.0",
 					"status": 1
 				}
 			]
@@ -124,13 +123,13 @@ func TestParseFlexibleBalance(t *testing.T) {
 				{
 					"package_code": "TCACA_bonus_30",
 					"package_name": "成长中心每日赠送积分",
-					"remaining_credits": 30.0,
+					"remaining_credits": "30.0",
 					"status": 1
 				},
 				{
 					"package_code": "TCACA_checkin_100",
 					"package_name": "每日签到积分奖励",
-					"remaining_credits": 100.0,
+					"remaining_credits": "100.0",
 					"status": 1
 				}
 			]
@@ -154,7 +153,7 @@ func TestParseFlexibleBalance(t *testing.T) {
 		"data": [
 			{
 				"packageName": "国内签到 100 积分",
-				"remainingCredits": 100,
+				"remainingCredits": "100",
 				"status": 1
 			}
 		]

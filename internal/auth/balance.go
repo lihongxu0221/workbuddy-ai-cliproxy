@@ -35,25 +35,32 @@ func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (
 	summaryURL := fmt.Sprintf("%s/billing/meter/get-user-resource-summary", acc.BaseURL())
 	plan, creditsSummary, pkgsSummary, errSummary := b.fetchSummaryEndpoint(ctx, client, acc, summaryURL)
 
-	// 2. 同时调用 /billing/meter/get-user-resource-free-packages 获取赠送与签到详细包名
+	// 2. 同时调用 /billing/meter/get-user-resource-free-packages 获取赠送与签到详细包 (带今日 SlicePeriod 范围)
 	freeURL := fmt.Sprintf("%s/billing/meter/get-user-resource-free-packages", acc.BaseURL())
-	creditsFree, pkgsFree, _ := b.fetchPackagesEndpoint(ctx, client, acc, freeURL)
+	creditsFree, pkgsFree, errFree := b.fetchPackagesEndpoint(ctx, client, acc, freeURL, true)
 
-	if len(pkgsFree) > 0 {
-		pkgsSummary = mergePackages(pkgsSummary, pkgsFree)
+	// 3. 同时调用 /billing/meter/get-user-resource-paid-packages 获取付费包
+	paidURL := fmt.Sprintf("%s/billing/meter/get-user-resource-paid-packages", acc.BaseURL())
+	creditsPaid, pkgsPaid, _ := b.fetchPackagesEndpoint(ctx, client, acc, paidURL, false)
+
+	// 合并所有积分包
+	allPkgs := mergePackages(pkgsSummary, pkgsFree)
+	allPkgs = mergePackages(allPkgs, pkgsPaid)
+
+	finalCredits := math.Max(creditsSummary, creditsFree+creditsPaid)
+	if finalCredits == 0 && len(allPkgs) > 0 {
+		finalCredits = sumPackageCredits(allPkgs)
 	}
 
-	finalCredits := math.Max(creditsSummary, creditsFree)
-	if finalCredits == 0 && len(pkgsSummary) > 0 {
-		finalCredits = sumPackageCredits(pkgsSummary)
+	log.Printf("[workbuddy] balance probed for %s (%s): plan=%s summary=%.2f free=%.2f paid=%.2f final=%.2f pkgs=%d",
+		acc.ID, acc.Realm, plan, creditsSummary, creditsFree, creditsPaid, finalCredits, len(allPkgs))
+
+	if (errSummary == nil || errFree == nil) && (finalCredits > 0 || len(allPkgs) > 0 || plan != "") {
+		b.updateAccountBalanceWithPlan(acc, finalCredits, allPkgs, plan)
+		return finalCredits, allPkgs, nil
 	}
 
-	if errSummary == nil && (finalCredits > 0 || len(pkgsSummary) > 0 || plan != "") {
-		b.updateAccountBalanceWithPlan(acc, finalCredits, pkgsSummary, plan)
-		return finalCredits, pkgsSummary, nil
-	}
-
-	// 3. 尝试旧版兼容接口 /v2/billing/meter/get-user-resource
+	// 4. 尝试旧版兼容接口 /v2/billing/meter/get-user-resource
 	primaryURL := fmt.Sprintf("%s/v2/billing/meter/get-user-resource", acc.BaseURL())
 	creditsOld, pkgsOld, errOld := b.fetchOldEndpoint(ctx, client, acc, primaryURL)
 	if errOld == nil && (creditsOld > 0 || len(pkgsOld) > 0) {
@@ -61,7 +68,7 @@ func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (
 		return creditsOld, pkgsOld, nil
 	}
 
-	// 4. 兜底保护：如果上游暂时返回失败，但账号已有历史积分，保留已有积分不抹零
+	// 5. 兜底保护：如果上游暂时返回失败，但账号已有历史积分，保留已有积分不抹零
 	acc.mu.RLock()
 	existingCredits := acc.Credits
 	existingPkgs := acc.CreditPackages
@@ -83,11 +90,11 @@ func (b *BalanceChecker) FetchBalance(ctx context.Context, acc *WorkBuddyAuth) (
 		acc.Plan = existingPlan
 	}
 
-	if errSummary != nil {
+	if errSummary != nil && errFree != nil {
 		return 0, nil, errSummary
 	}
-	b.updateAccountBalanceWithPlan(acc, finalCredits, pkgsSummary, plan)
-	return finalCredits, pkgsSummary, nil
+	b.updateAccountBalanceWithPlan(acc, finalCredits, allPkgs, plan)
+	return finalCredits, allPkgs, nil
 }
 
 func (b *BalanceChecker) updateAccountBalanceWithPlan(acc *WorkBuddyAuth, credits float64, pkgs []CreditPackage, plan string) {
@@ -99,7 +106,11 @@ func (b *BalanceChecker) updateAccountBalanceWithPlan(acc *WorkBuddyAuth, credit
 	if plan != "" {
 		acc.Plan = plan
 	} else if acc.Plan == "" {
-		acc.Plan = "免费版"
+		if acc.Realm == RealmCN {
+			acc.Plan = "体验版"
+		} else {
+			acc.Plan = "免费版"
+		}
 	}
 	acc.mu.Unlock()
 
@@ -133,9 +144,28 @@ func (b *BalanceChecker) fetchSummaryEndpoint(ctx context.Context, client *http.
 	return parseSummaryResponse(bodyBytes)
 }
 
-func (b *BalanceChecker) fetchPackagesEndpoint(ctx context.Context, client *http.Client, acc *WorkBuddyAuth, apiURL string) (float64, []CreditPackage, error) {
-	payload := []byte(`{"PageNumber":1,"PageSize":200,"Status":[1,2]}`)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(payload))
+func (b *BalanceChecker) fetchPackagesEndpoint(ctx context.Context, client *http.Client, acc *WorkBuddyAuth, apiURL string, isFree bool) (float64, []CreditPackage, error) {
+	// 严格遵循客户端 buildSlicePeriodRange 逻辑构建今日切片范围 (带 00:00:00 ~ 23:59:59)
+	cst := time.FixedZone("CST", 8*3600)
+	nowCST := time.Now().In(cst)
+	startDay := nowCST.Format("2006-01-02") + " 00:00:00"
+	endDay := nowCST.Format("2006-01-02") + " 23:59:59"
+
+	payloadMap := map[string]any{
+		"PageNumber": 1,
+		"PageSize":   200,
+		"Status":     []int{1, 2},
+	}
+
+	if isFree {
+		payloadMap["SlicePeriodStartTime"] = startDay
+		payloadMap["SlicePeriodEndTime"] = endDay
+	} else {
+		payloadMap["NeedRenewInfo"] = true
+	}
+
+	payloadBytes, _ := json.Marshal(payloadMap)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(payloadBytes))
 	if err != nil {
 		return 0, nil, err
 	}
@@ -221,7 +251,7 @@ func applyHeaders(req *http.Request, acc *WorkBuddyAuth) {
 		req.Header.Set("X-No-Department-Info", "1")
 	} else {
 		// Global / en
-		req.Header.Set("User-Agent", "WorkBuddy/1.2.8 (Windows NT 10.0; Win64; x64) Electron/32.2.1")
+		req.Header.Set("User-Agent", "WorkBuddyAI/5.8.4 (Windows NT 10.0; Win64; x64) Electron/32.2.1")
 		req.Header.Set("Origin", "https://www.codebuddy.ai")
 		req.Header.Set("Referer", "https://www.codebuddy.ai/")
 		req.Header.Set("X-Domain", acc.Domain())
@@ -249,11 +279,11 @@ func parseSummaryResponse(body []byte) (string, float64, []CreditPackage, error)
 		SubscriptionPackageCode string `json:"SubscriptionPackageCode"`
 		IsPaidUser              bool   `json:"IsPaidUser"`
 		Packages                []struct {
-			PackageCode         string  `json:"PackageCode"`
-			PackageName         string  `json:"PackageName"`
-			CycleTotalCapacity  float64 `json:"CycleTotalCapacity"`
-			CycleRemainCapacity float64 `json:"CycleRemainCapacity"`
-			CycleUsedCapacity   float64 `json:"CycleUsedCapacity"`
+			PackageCode         string `json:"PackageCode"`
+			PackageName         string `json:"PackageName"`
+			CycleTotalCapacity  any    `json:"CycleTotalCapacity"`
+			CycleRemainCapacity any    `json:"CycleRemainCapacity"`
+			CycleUsedCapacity   any    `json:"CycleUsedCapacity"`
 		} `json:"Packages"`
 	}
 
@@ -263,8 +293,6 @@ func parseSummaryResponse(body []byte) (string, float64, []CreditPackage, error)
 	if plan == "" {
 		if data.IsPaidUser {
 			plan = "Pro"
-		} else {
-			plan = "免费版"
 		}
 	}
 
@@ -275,14 +303,16 @@ func parseSummaryResponse(body []byte) (string, float64, []CreditPackage, error)
 		if name == "" {
 			name = resolvePackageDisplayName(p.PackageCode)
 		}
-		if p.CycleRemainCapacity > 0 {
-			totalRemain += p.CycleRemainCapacity
+		rem := toFloat(p.CycleRemainCapacity)
+		initVal := toFloat(p.CycleTotalCapacity)
+		if rem > 0 {
+			totalRemain += rem
 		}
 		pkgs = append(pkgs, CreditPackage{
 			PackageCode:      p.PackageCode,
 			PackageName:      name,
-			RemainingCredits: p.CycleRemainCapacity,
-			InitialCredits:   p.CycleTotalCapacity,
+			RemainingCredits: rem,
+			InitialCredits:   initVal,
 			Status:           1,
 		})
 	}
@@ -300,32 +330,77 @@ func parsePackagesResponse(body []byte) (float64, []CreditPackage, error) {
 		return 0, nil, fmt.Errorf("packages envelope invalid")
 	}
 
+	// 兼容任意首字母大写/小写与字符串数值
 	var data struct {
 		Accounts []struct {
-			ResourceId                 string  `json:"ResourceId"`
-			PackageCode                string  `json:"PackageCode"`
-			PackageName                string  `json:"PackageName"`
-			CycleCapacityRemainPrecise float64 `json:"CycleCapacityRemainPrecise"`
-			CycleCapacitySizePrecise   float64 `json:"CycleCapacitySizePrecise"`
+			ResourceId                 string `json:"ResourceId"`
+			PackageCode                string `json:"PackageCode"`
+			PackageName                string `json:"PackageName"`
+			CapacityType               any    `json:"CapacityType"`
+			CycleCapacityRemainPrecise any    `json:"CycleCapacityRemainPrecise"`
+			CycleCapacitySizePrecise   any    `json:"CycleCapacitySizePrecise"`
 			SlicePeriodUsageDetails    []struct {
-				SlicePeriodCapacityRemainPrecise float64 `json:"SlicePeriodCapacityRemainPrecise"`
-				SlicePeriodCapacitySizePrecise   float64 `json:"SlicePeriodCapacitySizePrecise"`
+				SlicePeriodCapacityRemainPrecise any `json:"SlicePeriodCapacityRemainPrecise"`
+				SlicePeriodCapacitySizePrecise   any `json:"SlicePeriodCapacitySizePrecise"`
 			} `json:"SlicePeriodUsageDetails"`
 		} `json:"Accounts"`
+		// 备用小写
+		AccountsAlt []struct {
+			ResourceId                 string `json:"resourceId"`
+			PackageCode                string `json:"packageCode"`
+			PackageName                string `json:"packageName"`
+			CapacityType               any    `json:"capacityType"`
+			CycleCapacityRemainPrecise any    `json:"cycleCapacityRemainPrecise"`
+			CycleCapacitySizePrecise   any    `json:"cycleCapacitySizePrecise"`
+			SlicePeriodUsageDetails    []struct {
+				SlicePeriodCapacityRemainPrecise any `json:"slicePeriodCapacityRemainPrecise"`
+				SlicePeriodCapacitySizePrecise   any `json:"slicePeriodCapacitySizePrecise"`
+			} `json:"slicePeriodUsageDetails"`
+		} `json:"accounts"`
 	}
 
 	_ = json.Unmarshal(env.Data, &data)
 
 	var totalRemain float64
 	var pkgs []CreditPackage
-	for _, a := range data.Accounts {
-		rem := a.CycleCapacityRemainPrecise
-		if rem == 0 && len(a.SlicePeriodUsageDetails) > 0 {
-			rem = a.SlicePeriodUsageDetails[0].SlicePeriodCapacityRemainPrecise
+
+	list := data.Accounts
+	if len(list) == 0 && len(data.AccountsAlt) > 0 {
+		for _, a := range data.AccountsAlt {
+			list = append(list, struct {
+				ResourceId                 string `json:"ResourceId"`
+				PackageCode                string `json:"PackageCode"`
+				PackageName                string `json:"PackageName"`
+				CapacityType               any    `json:"CapacityType"`
+				CycleCapacityRemainPrecise any    `json:"CycleCapacityRemainPrecise"`
+				CycleCapacitySizePrecise   any    `json:"CycleCapacitySizePrecise"`
+				SlicePeriodUsageDetails    []struct {
+					SlicePeriodCapacityRemainPrecise any `json:"SlicePeriodCapacityRemainPrecise"`
+					SlicePeriodCapacitySizePrecise   any `json:"SlicePeriodCapacitySizePrecise"`
+				} `json:"SlicePeriodUsageDetails"`
+			}{
+				ResourceId:                 a.ResourceId,
+				PackageCode:                a.PackageCode,
+				PackageName:                a.PackageName,
+				CapacityType:               a.CapacityType,
+				CycleCapacityRemainPrecise: a.CycleCapacityRemainPrecise,
+				CycleCapacitySizePrecise:   a.CycleCapacitySizePrecise,
+			})
 		}
-		initVal := a.CycleCapacitySizePrecise
-		if initVal == 0 && len(a.SlicePeriodUsageDetails) > 0 {
-			initVal = a.SlicePeriodUsageDetails[0].SlicePeriodCapacitySizePrecise
+	}
+
+	for _, a := range list {
+		rem := toFloat(a.CycleCapacityRemainPrecise)
+		initVal := toFloat(a.CycleCapacitySizePrecise)
+
+		// 核心关键：如果是切片配额 (CapacityType == 4 或包含 SlicePeriodUsageDetails)，优先从 Slice 节点读取真实剩余
+		if len(a.SlicePeriodUsageDetails) > 0 {
+			sliceRem := toFloat(a.SlicePeriodUsageDetails[0].SlicePeriodCapacityRemainPrecise)
+			sliceInit := toFloat(a.SlicePeriodUsageDetails[0].SlicePeriodCapacitySizePrecise)
+			if sliceRem > 0 || rem == 0 {
+				rem = sliceRem
+				initVal = sliceInit
+			}
 		}
 
 		name := a.PackageName
