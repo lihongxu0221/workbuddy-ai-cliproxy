@@ -792,7 +792,7 @@ func (d *Dispatcher) handleManagementHandle(raw []byte) ([]byte, error) {
 
 	path := strings.TrimSpace(req.Path)
 
-	// 核心修复：如果是 Web 控制台页面请求，直接返回无外部引用的自包含 HTML，彻底避免 301 重定向与路径错位
+	// 核心修复：如果是 Web 控制台页面请求，直接返回注入了 ManagementKey 的自包含 HTML，彻底避免 301 重定向与鉴权遗漏
 	if path == "" ||
 		strings.HasSuffix(path, "/ui") ||
 		strings.HasSuffix(path, "/ui/") ||
@@ -805,7 +805,7 @@ func (d *Dispatcher) handleManagementHandle(raw []byte) ([]byte, error) {
 				"Content-Type":  []string{"text/html; charset=utf-8"},
 				"Cache-Control": []string{"no-cache, no-store, must-revalidate"},
 			},
-			Body: web.RenderFullHTML(),
+			Body: web.RenderFullHTML(config.GetManagementKey()),
 		})
 	}
 

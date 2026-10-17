@@ -40,4 +40,10 @@ func TestRenderFullHTML(t *testing.T) {
 	if !strings.Contains(htmlStr, "/v0/resource/plugins/workbuddyai") {
 		t.Errorf("expected inline script to contain /v0/resource/plugins/workbuddyai route base")
 	}
+
+	// 验证动态注入 key
+	htmlWithKey := string(RenderFullHTML("test-secret-key-123"))
+	if !strings.Contains(htmlWithKey, `window.__CPA_MANAGEMENT_KEY__ = "test-secret-key-123"`) {
+		t.Errorf("expected HTML to contain injected key script")
+	}
 }

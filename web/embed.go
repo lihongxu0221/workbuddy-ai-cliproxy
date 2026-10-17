@@ -2,6 +2,7 @@ package web
 
 import (
 	"embed"
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -12,16 +13,15 @@ import (
 var StaticFS embed.FS
 
 var (
-	fullHTMLOnce  sync.Once
-	fullHTMLBytes []byte
+	baseHTMLOnce  sync.Once
+	baseHTMLString string
 )
 
-// RenderFullHTML 将 index.html, dashboard.css 和 app.js 合并成无外部依赖的单文件 HTML
-func RenderFullHTML() []byte {
-	fullHTMLOnce.Do(func() {
+func getBaseHTML() string {
+	baseHTMLOnce.Do(func() {
 		htmlBytes, err := StaticFS.ReadFile("index.html")
 		if err != nil {
-			fullHTMLBytes = []byte("<!doctype html><title>WorkBuddy AI</title><body>Failed to load HTML</body>")
+			baseHTMLString = "<!doctype html><title>WorkBuddy AI</title><body>Failed to load HTML</body>"
 			return
 		}
 
@@ -35,7 +35,24 @@ func RenderFullHTML() []byte {
 		jsTag := "<script>\n" + string(jsBytes) + "\n</script>"
 		htmlStr = strings.Replace(htmlStr, `<script src="js/app.js"></script>`, jsTag, 1)
 
-		fullHTMLBytes = []byte(htmlStr)
+		baseHTMLString = htmlStr
 	})
-	return fullHTMLBytes
+	return baseHTMLString
+}
+
+// RenderFullHTML 将 index.html, dashboard.css 和 app.js 合并成单文件 HTML，并可动态注入鉴权密钥
+func RenderFullHTML(injectedKey ...string) []byte {
+	htmlStr := getBaseHTML()
+
+	var key string
+	if len(injectedKey) > 0 {
+		key = strings.TrimSpace(injectedKey[0])
+	}
+
+	if key != "" {
+		injection := fmt.Sprintf("<script>\n  window.__CPA_MANAGEMENT_KEY__ = %q;\n</script>\n</head>", key)
+		htmlStr = strings.Replace(htmlStr, "</head>", injection, 1)
+	}
+
+	return []byte(htmlStr)
 }

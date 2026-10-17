@@ -2,6 +2,7 @@ package management
 
 import (
 	"net/http"
+	"workbuddy-ai-cliproxy/internal/config"
 	"workbuddy-ai-cliproxy/web"
 
 	"github.com/gin-gonic/gin"
@@ -13,7 +14,7 @@ func MountRoutes(group *gin.RouterGroup) {
 	renderUI := func(c *gin.Context) {
 		c.Header("Content-Type", "text/html; charset=utf-8")
 		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
-		c.Data(http.StatusOK, "text/html; charset=utf-8", web.RenderFullHTML())
+		c.Data(http.StatusOK, "text/html; charset=utf-8", web.RenderFullHTML(config.GetManagementKey()))
 	}
 
 	if group.BasePath() == "" || group.BasePath() == "/" {

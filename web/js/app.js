@@ -16,6 +16,9 @@ function getApiBase() {
 }
 
 function getManagementKey() {
+  if (typeof window !== 'undefined' && window.__CPA_MANAGEMENT_KEY__) {
+    return window.__CPA_MANAGEMENT_KEY__;
+  }
   try {
     return window.localStorage?.getItem('cpa_management_key') ||
            window.localStorage?.getItem('managementKey') ||
@@ -29,7 +32,7 @@ function getManagementKey() {
 }
 
 function getAuthHeaders(extraHeaders = {}) {
-  const headers = { "Accept": "application/json", ...extraHeaders };
+  const headers = { "Content-Type": "application/json", "Accept": "application/json", ...extraHeaders };
   const key = getManagementKey();
   if (key) {
     headers["Authorization"] = "Bearer " + key;
