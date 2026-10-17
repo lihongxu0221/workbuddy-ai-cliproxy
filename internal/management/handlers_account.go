@@ -56,44 +56,34 @@ func HandleListAccounts(c *gin.Context) {
 	})
 }
 
-// HandleImportAccount 导入新凭据 (同时兼容 JSON Body 与 Query 参数)
+// HandleImportAccount 导入新凭据 (严格要求 POST JSON 载荷)
 func HandleImportAccount(c *gin.Context) {
-	var token, refreshToken, userID, nickname string
-	realm := auth.RealmGlobal
-
 	var body struct {
-		Token        string     `json:"token"`
+		Token        string     `json:"token" binding:"required"`
 		RefreshToken string     `json:"refresh_token"`
 		UserID       string     `json:"user_id"`
 		Nickname     string     `json:"nickname"`
 		Realm        auth.Realm `json:"realm"`
 	}
 
-	if err := c.ShouldBindJSON(&body); err == nil && body.Token != "" {
-		token = strings.TrimSpace(body.Token)
-		refreshToken = strings.TrimSpace(body.RefreshToken)
-		userID = strings.TrimSpace(body.UserID)
-		nickname = strings.TrimSpace(body.Nickname)
-		if body.Realm != "" {
-			realm = body.Realm
-		}
-	} else {
-		token = strings.TrimSpace(c.Query("token"))
-		refreshToken = strings.TrimSpace(c.Query("refresh_token"))
-		userID = strings.TrimSpace(c.Query("user_id"))
-		nickname = strings.TrimSpace(c.Query("nickname"))
-		if r := c.Query("realm"); r != "" {
-			realm = auth.Realm(r)
-		}
-	}
-
-	if token == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing token"})
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
 		return
 	}
 
+	token := strings.TrimSpace(body.Token)
+	if token == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "token is required"})
+		return
+	}
+
+	realm := body.Realm
+	if realm == "" {
+		realm = auth.RealmGlobal
+	}
+
 	helper := auth.NewLoginHelper()
-	acc, err := helper.ImportToken(c.Request.Context(), token, refreshToken, userID, nickname, realm)
+	acc, err := helper.ImportToken(c.Request.Context(), token, strings.TrimSpace(body.RefreshToken), strings.TrimSpace(body.UserID), strings.TrimSpace(body.Nickname), realm)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": err.Error()})
 		return
@@ -106,19 +96,19 @@ func HandleImportAccount(c *gin.Context) {
 	})
 }
 
-// HandleRefreshAccount 触发指定账号余额与 Token 刷新 (同时兼容 JSON Body 与 Query 参数)
+// HandleRefreshAccount 触发指定账号余额与 Token 刷新 (严格要求 POST JSON 载荷)
 func HandleRefreshAccount(c *gin.Context) {
-	id := strings.TrimSpace(c.Query("id"))
-	if id == "" {
-		var body struct {
-			ID string `json:"id"`
-		}
-		_ = c.ShouldBindJSON(&body)
-		id = strings.TrimSpace(body.ID)
+	var body struct {
+		ID string `json:"id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
+		return
 	}
 
+	id := strings.TrimSpace(body.ID)
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing id"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "id is required"})
 		return
 	}
 
@@ -146,22 +136,11 @@ func HandleRefreshAccount(c *gin.Context) {
 	})
 }
 
-// HandleDeleteAccount 删除账号 (同时兼容 Path Param 与 Query 参数)
+// HandleDeleteAccount 删除账号 (严格要求 DELETE /accounts/:id)
 func HandleDeleteAccount(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
-		id = strings.TrimSpace(c.Query("id"))
-	}
-	if id == "" {
-		var body struct {
-			ID string `json:"id"`
-		}
-		_ = c.ShouldBindJSON(&body)
-		id = strings.TrimSpace(body.ID)
-	}
-
-	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing id"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing account id parameter in path"})
 		return
 	}
 

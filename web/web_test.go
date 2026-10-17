@@ -36,9 +36,9 @@ func TestRenderFullHTML(t *testing.T) {
 		t.Errorf("HTML must contain inline <script>")
 	}
 
-	// 验证包含新的 getApiBase 逻辑 (资源路由免密通道)
-	if !strings.Contains(htmlStr, "/v0/resource/plugins/workbuddyai") {
-		t.Errorf("expected inline script to contain /v0/resource/plugins/workbuddyai route base")
+	// 验证包含管理路由基地址
+	if !strings.Contains(htmlStr, "/v0/management/workbuddyai") {
+		t.Errorf("expected inline script to contain /v0/management/workbuddyai route base")
 	}
 
 	// 验证动态注入 key

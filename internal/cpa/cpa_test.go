@@ -216,8 +216,8 @@ func TestManagementRegisterAndHandle(t *testing.T) {
 	if len(regResp.Routes) == 0 {
 		t.Errorf("expected management routes to be registered")
 	}
-	if len(regResp.Resources) == 0 || regResp.Resources[0].Path != "/ui" {
-		t.Errorf("expected resource route /ui to be registered")
+	if len(regResp.Resources) != 1 || regResp.Resources[0].Path != "/ui" {
+		t.Errorf("expected only single resource route /ui to be registered, got %d", len(regResp.Resources))
 	}
 
 	// 2. 测试 management.handle 分发到 Gin 内部获取 /models

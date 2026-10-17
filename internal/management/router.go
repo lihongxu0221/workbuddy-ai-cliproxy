@@ -2,6 +2,7 @@ package management
 
 import (
 	"net/http"
+	"strings"
 	"workbuddy-ai-cliproxy/internal/config"
 	"workbuddy-ai-cliproxy/web"
 
@@ -10,7 +11,40 @@ import (
 
 // MountRoutes 在 CPA 宿主的 Gin 引擎上挂载 WorkBuddy 管理控制台与 REST API
 func MountRoutes(group *gin.RouterGroup) {
-	// 1. 静态资产与前端 UI 直接返回自包含 HTML，彻底杜绝 301 重定向与资源丢失
+	// 1. 安全鉴权中间件：严格保护所有数据接口，拒绝未授权访问
+	group.Use(func(c *gin.Context) {
+		path := c.Request.URL.Path
+
+		// 允许直接加载 UI 页面资产
+		if path == "" || path == "/" ||
+			strings.HasSuffix(path, "/ui") ||
+			strings.HasSuffix(path, "/ui/") ||
+			strings.Contains(path, "/ui/static") {
+			c.Next()
+			return
+		}
+
+		// 严格校验宿主 Management Key (若配置或探测到密钥，强制鉴权)
+		cfgKey := config.GetManagementKey()
+		if cfgKey != "" {
+			reqKey := c.GetHeader("Authorization")
+			if reqKey == "" {
+				reqKey = c.GetHeader("X-Management-Key")
+			}
+
+			if reqKey != "Bearer "+cfgKey && reqKey != cfgKey {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"code":    401,
+					"error":   "invalid management key",
+					"message": "unauthorized: management key required for this operation",
+				})
+				return
+			}
+		}
+		c.Next()
+	})
+
+	// 2. 静态页面直出渲染
 	renderUI := func(c *gin.Context) {
 		c.Header("Content-Type", "text/html; charset=utf-8")
 		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -27,50 +61,27 @@ func MountRoutes(group *gin.RouterGroup) {
 	group.GET("/ui/", renderUI)
 	group.StaticFS("/ui/static", http.FS(web.StaticFS))
 
-	// 2. 账号体系 API (同时支持 GET 与 POST/DELETE，免受网关鉴权阻碍)
+	// 3. 账号体系 API (严格遵循 HTTP Method 语义，严禁通过 GET 执行删改)
 	group.GET("/accounts", HandleListAccounts)
-	group.GET("/api/accounts", HandleListAccounts)
 	group.POST("/accounts/import", HandleImportAccount)
-	group.GET("/accounts/import", HandleImportAccount)
-	group.GET("/api/accounts/import", HandleImportAccount)
 	group.POST("/accounts/refresh", HandleRefreshAccount)
-	group.GET("/accounts/refresh", HandleRefreshAccount)
-	group.GET("/api/accounts/refresh", HandleRefreshAccount)
 	group.DELETE("/accounts/:id", HandleDeleteAccount)
-	group.GET("/accounts/delete", HandleDeleteAccount)
-	group.GET("/api/accounts/delete", HandleDeleteAccount)
 
-	// 3. 动作与打卡执行 API
+	// 4. 动作与打卡执行 API (严格限制通过 POST 执行改动)
 	group.POST("/actions/dailybonus", HandleDailyBonusManual)
-	group.GET("/actions/dailybonus", HandleDailyBonusManual)
-	group.GET("/api/actions/dailybonus", HandleDailyBonusManual)
 	group.POST("/actions/checkin", HandleCheckinManual)
-	group.GET("/actions/checkin", HandleCheckinManual)
-	group.GET("/api/actions/checkin", HandleCheckinManual)
 	group.POST("/actions/trial", HandleActivateTrial)
-	group.GET("/actions/trial", HandleActivateTrial)
-	group.GET("/api/actions/trial", HandleActivateTrial)
 	group.GET("/dailybonus/status", HandleDailyBonusStatus)
-	group.GET("/api/dailybonus/status", HandleDailyBonusStatus)
 	group.POST("/actions/login-start", HandleLoginStart)
-	group.GET("/actions/login-start", HandleLoginStart)
-	group.GET("/api/actions/login-start", HandleLoginStart)
-	group.POST("/actions/login-poll", HandleLoginPoll)
 	group.GET("/actions/login-poll", HandleLoginPoll)
-	group.GET("/api/actions/login-poll", HandleLoginPoll)
 
-	// 4. 模型管理 API
+	// 5. 模型管理 API
 	group.GET("/models", HandleListModels)
-	group.GET("/api/models", HandleListModels)
 	group.POST("/models/toggle", HandleToggleModel)
-	group.GET("/models/toggle", HandleToggleModel)
 	group.POST("/models/test", HandleTestModel)
-	group.GET("/models/test", HandleTestModel)
-	group.GET("/api/models/test", HandleTestModel)
 
-	// 5. 统计与配置 API
+	// 6. 统计与配置 API
 	group.GET("/stats", HandleGetStats)
-	group.GET("/api/stats", HandleGetStats)
 	group.GET("/config", HandleGetConfig)
 	group.POST("/config", HandleUpdateConfig)
 }

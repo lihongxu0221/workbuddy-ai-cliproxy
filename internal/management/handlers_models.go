@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HandleListModels 返回所有模型信息
+// HandleListModels 返回所有模型信息 (只读 GET)
 func HandleListModels(c *gin.Context) {
 	reg := models.GetRegistry()
 	list := reg.ListAll()
@@ -21,7 +21,7 @@ func HandleListModels(c *gin.Context) {
 	})
 }
 
-// HandleToggleModel 启用或下架模型
+// HandleToggleModel 启用或下架模型 (要求 POST JSON 载荷)
 func HandleToggleModel(c *gin.Context) {
 	var body struct {
 		ID       string `json:"id" binding:"required"`
@@ -38,18 +38,19 @@ func HandleToggleModel(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "updated"})
 }
 
-// HandleTestModel 发送一条轻量真实对话以测试连通性并探查真实 Credit 扣费
+// HandleTestModel 发送一条轻量真实对话以测试连通性并探查真实 Credit 扣费 (要求 POST JSON 载荷)
 func HandleTestModel(c *gin.Context) {
-	model := strings.TrimSpace(c.Query("model"))
-	if model == "" {
-		var body struct {
-			Model string `json:"model"`
-		}
-		_ = c.ShouldBindJSON(&body)
-		model = strings.TrimSpace(body.Model)
+	var body struct {
+		Model string `json:"model" binding:"required"`
 	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
+		return
+	}
+
+	model := strings.TrimSpace(body.Model)
 	if model == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing model parameter"})
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "model parameter is required"})
 		return
 	}
 

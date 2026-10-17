@@ -24,17 +24,14 @@ type actionLoginCtx struct {
 	expiresAt time.Time
 }
 
-// HandleDailyBonusManual 手动触发国际区成长中心打卡
+// HandleDailyBonusManual 手动触发国际区成长中心打卡 (要求 POST 请求)
 func HandleDailyBonusManual(c *gin.Context) {
-	id := strings.TrimSpace(c.Query("id"))
-	if id == "" {
-		var body struct {
-			ID string `json:"id"` // 若为空则打卡全部 Global 账号
-		}
-		_ = c.ShouldBindJSON(&body)
-		id = strings.TrimSpace(body.ID)
+	var body struct {
+		ID string `json:"id"` // 若为空则打卡全部 Global 账号
 	}
+	_ = c.ShouldBindJSON(&body)
 
+	id := strings.TrimSpace(body.ID)
 	reporter := growth.NewGlobalBonusReporter()
 	store := auth.GetStore()
 
@@ -57,21 +54,17 @@ func HandleDailyBonusManual(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "batch daily report triggered"})
 }
 
-// HandleCheckinManual 手动触发国内区每日签到
+// HandleCheckinManual 手动触发国内区每日签到 (要求 POST JSON 载荷)
 func HandleCheckinManual(c *gin.Context) {
-	id := strings.TrimSpace(c.Query("id"))
-	if id == "" {
-		var body struct {
-			ID string `json:"id"`
-		}
-		_ = c.ShouldBindJSON(&body)
-		id = strings.TrimSpace(body.ID)
+	var body struct {
+		ID string `json:"id" binding:"required"`
 	}
-	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing id"})
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
 		return
 	}
 
+	id := strings.TrimSpace(body.ID)
 	store := auth.GetStore()
 	acc := store.GetByID(id)
 	if acc == nil {
@@ -93,21 +86,17 @@ func HandleCheckinManual(c *gin.Context) {
 	})
 }
 
-// HandleActivateTrial 手动为国际区新账号激活 250 积分 Expert 权益
+// HandleActivateTrial 手动为国际区新账号激活 250 积分 Expert 权益 (要求 POST JSON 载荷)
 func HandleActivateTrial(c *gin.Context) {
-	id := strings.TrimSpace(c.Query("id"))
-	if id == "" {
-		var body struct {
-			ID string `json:"id"`
-		}
-		_ = c.ShouldBindJSON(&body)
-		id = strings.TrimSpace(body.ID)
+	var body struct {
+		ID string `json:"id" binding:"required"`
 	}
-	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing id"})
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
 		return
 	}
 
+	id := strings.TrimSpace(body.ID)
 	store := auth.GetStore()
 	acc := store.GetByID(id)
 	if acc == nil {
@@ -129,9 +118,9 @@ func HandleActivateTrial(c *gin.Context) {
 	})
 }
 
-// HandleDailyBonusStatus 查询指定账号今日打卡与热力图状态
+// HandleDailyBonusStatus 查询指定账号今日打卡与热力图状态 (只读 GET)
 func HandleDailyBonusStatus(c *gin.Context) {
-	id := c.Query("id")
+	id := strings.TrimSpace(c.Query("id"))
 	if id == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing id"})
 		return
@@ -161,14 +150,16 @@ func HandleDailyBonusStatus(c *gin.Context) {
 	})
 }
 
-// HandleLoginStart 启动国内区或国际区的扫码/OAuth 流程
+// HandleLoginStart 启动国内区或国际区的扫码/OAuth 流程 (要求 POST JSON 载荷)
 func HandleLoginStart(c *gin.Context) {
-	realmStr := strings.ToLower(c.DefaultQuery("realm", "global"))
+	realmStr := "global"
 	var body struct {
 		Realm string `json:"realm"`
 	}
 	if err := c.ShouldBindJSON(&body); err == nil && body.Realm != "" {
-		realmStr = strings.ToLower(body.Realm)
+		realmStr = strings.ToLower(strings.TrimSpace(body.Realm))
+	} else if q := c.Query("realm"); q != "" {
+		realmStr = strings.ToLower(strings.TrimSpace(q))
 	}
 
 	realm := auth.RealmGlobal
@@ -233,18 +224,17 @@ func HandleLoginStart(c *gin.Context) {
 	})
 }
 
-// HandleLoginPoll 轮询国内区或国际区的登录结果
+// HandleLoginPoll 轮询国内区或国际区的登录结果 (只读状态查询)
 func HandleLoginPoll(c *gin.Context) {
-	state := c.Query("state")
+	state := strings.TrimSpace(c.Query("state"))
 	if state == "" {
 		var body struct {
 			State string `json:"state"`
 		}
 		_ = c.ShouldBindJSON(&body)
-		state = body.State
+		state = strings.TrimSpace(body.State)
 	}
 
-	state = strings.TrimSpace(state)
 	if state == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing state parameter"})
 		return
