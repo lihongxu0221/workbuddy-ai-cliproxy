@@ -843,13 +843,28 @@ func (d *Dispatcher) handleQuotaFetch(ctx context.Context, raw []byte) ([]byte, 
 	store := auth.GetStore()
 	var targetAcc *auth.WorkBuddyAuth
 
-	if req.AuthID != "" {
-		targetAcc = store.GetByID(req.AuthID)
+	// 1. 多候选标识智能模糊匹配 (req.AuthID, req.AuthIndex, UID)
+	for _, idCandidate := range []string{req.AuthID, req.AuthIndex} {
+		if strings.TrimSpace(idCandidate) != "" {
+			targetAcc = store.FindAccount(idCandidate)
+			if targetAcc != nil {
+				break
+			}
+		}
 	}
 
+	// 2. 从 StorageJSON 解析
 	if targetAcc == nil && len(req.StorageJSON) > 0 {
 		if accs, err := auth.ParseAuthPayload(req.StorageJSON, "", ""); err == nil && len(accs) > 0 {
 			targetAcc = accs[0]
+		}
+	}
+
+	// 3. 兜底匹配：若账号池中仅有 1 个账号，或根据 realm/uid 匹配
+	if targetAcc == nil {
+		all := store.List()
+		if len(all) == 1 {
+			targetAcc = all[0]
 		}
 	}
 
@@ -864,20 +879,50 @@ func (d *Dispatcher) handleQuotaFetch(ctx context.Context, raw []byte) ([]byte, 
 		pkgs = targetAcc.CreditPackages
 	}
 
-	return okEnvelope(QuotaFetchResponse{
+	tierName := "WorkBuddy AI"
+	if targetAcc.Realm == auth.RealmCN {
+		tierName = "CodeBuddy 国内版"
+	}
+
+	resp := QuotaFetchResponse{
+		Subscription: &QuotaSubscription{
+			Plan:     string(targetAcc.Realm),
+			TierName: tierName,
+		},
+		Summary: []QuotaMetric{
+			{
+				Key:    "credits",
+				Label:  "可用总积分 (Credits)",
+				Value:  credits,
+				Unit:   "Credits",
+				Format: "number",
+			},
+		},
 		Provider:       "workbuddyai",
 		RemainingQuota: credits,
 		TotalQuota:     1000.0,
-		IsUnlimited:    false,
-		Currency:       "CREDITS",
-		QuotaType:      string(targetAcc.Realm),
 		Details: map[string]any{
 			"realm":           targetAcc.Realm,
 			"user_id":         targetAcc.UserID,
 			"packages":        pkgs,
 			"remaining_coins": credits,
 		},
-	})
+	}
+
+	// 将各个有效积分包 (赠送积分、签到积分、免费额度等) 放入 Summary 列表中供 CPAMP 渲染
+	for _, p := range pkgs {
+		if p.RemainingCredits > 0 {
+			resp.Summary = append(resp.Summary, QuotaMetric{
+				Key:    p.PackageCode,
+				Label:  p.PackageName,
+				Value:  p.RemainingCredits,
+				Unit:   "Credits",
+				Format: "number",
+			})
+		}
+	}
+
+	return okEnvelope(resp)
 }
 
 // -----------------------------------------------------------------------------

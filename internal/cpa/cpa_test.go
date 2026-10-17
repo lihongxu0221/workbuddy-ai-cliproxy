@@ -334,4 +334,27 @@ func TestQuotaDescribeAndFetch(t *testing.T) {
 	if fetchResp.RemainingQuota != 888.5 {
 		t.Errorf("expected quota 888.5, got %f", fetchResp.RemainingQuota)
 	}
+	if len(fetchResp.Summary) == 0 || fetchResp.Summary[0].Value != 888.5 {
+		t.Errorf("expected summary metric with value 888.5, got %v", fetchResp.Summary)
+	}
+
+	// 验证带 provider 前缀的 AuthID 检索 (匹配 CPAMP 传参)
+	fetchReqPrefix := QuotaFetchRequest{
+		AuthID:   "workbuddy/quota-test-acc",
+		Provider: "workbuddy",
+	}
+	fetchReqPrefixBytes, _ := json.Marshal(fetchReqPrefix)
+	fetchRespPrefixBytes, errPrefix := dispatcher.HandleMethod(context.Background(), MethodQuotaFetch, fetchReqPrefixBytes, nil)
+	if errPrefix != nil {
+		t.Fatalf("quota fetch with prefix failed: %v", errPrefix)
+	}
+
+	var envPrefix Envelope
+	_ = json.Unmarshal(fetchRespPrefixBytes, &envPrefix)
+	var fetchRespPrefix QuotaFetchResponse
+	_ = json.Unmarshal(envPrefix.Result, &fetchRespPrefix)
+
+	if fetchRespPrefix.RemainingQuota != 888.5 {
+		t.Errorf("expected quota 888.5 with prefix, got %f", fetchRespPrefix.RemainingQuota)
+	}
 }

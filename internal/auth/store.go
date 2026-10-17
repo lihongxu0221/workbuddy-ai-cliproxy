@@ -316,6 +316,55 @@ func (s *Store) GetByID(id string) *WorkBuddyAuth {
 	return nil
 }
 
+// FindAccount 智能多模式匹配账号 (精确匹配、去前缀匹配、UID 匹配、包含关系与文件名检索)
+func (s *Store) FindAccount(identifier string) *WorkBuddyAuth {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	id := strings.TrimSpace(identifier)
+	if id == "" {
+		return nil
+	}
+
+	// 1. 精确匹配
+	if acc, ok := s.accounts[id]; ok {
+		return acc.Copy()
+	}
+
+	// 2. 清理常见前缀后匹配 (去除 provider 前缀 "workbuddy/", "workbuddyai/", "codebuddy/")
+	cleanID := id
+	for _, p := range []string{"workbuddy/", "workbuddyai/", "codebuddy/", "workbuddy-", "workbuddyai-"} {
+		cleanID = strings.TrimPrefix(cleanID, p)
+	}
+	cleanID = strings.TrimSuffix(cleanID, ".json")
+
+	if acc, ok := s.accounts[cleanID]; ok {
+		return acc.Copy()
+	}
+
+	// 3. 遍历账号池按 UID、包含关系或文件名模糊检索
+	for _, acc := range s.accounts {
+		// A. UID 包含或匹配
+		if acc.UserID != "" && (acc.UserID == id || acc.UserID == cleanID || strings.Contains(id, acc.UserID)) {
+			return acc.Copy()
+		}
+		// B. ID 包含关系 (例如 workbuddy-da4c1fb7... 与 workbuddy-da4c1fb7...-global)
+		if acc.ID == cleanID || strings.Contains(id, acc.ID) || strings.Contains(acc.ID, cleanID) {
+			return acc.Copy()
+		}
+		// C. 文件名匹配
+		if acc.FilePath != "" {
+			base := filepath.Base(acc.FilePath)
+			cleanBase := strings.TrimSuffix(base, filepath.Ext(base))
+			if base == id || cleanBase == id || cleanBase == cleanID || strings.Contains(id, cleanBase) {
+				return acc.Copy()
+			}
+		}
+	}
+
+	return nil
+}
+
 // UpsertInMemory 仅在内存中注册或更新账号 (供插件 RPC 动态注册)
 func (s *Store) UpsertInMemory(acc *WorkBuddyAuth) {
 	if acc == nil || acc.ID == "" {

@@ -275,21 +275,55 @@ type QuotaDescribeResponse struct {
 	SupportsReset      bool     `json:"supports_reset"`
 }
 
+// QuotaSubscription 配额套餐订阅信息
+type QuotaSubscription struct {
+	Plan     string `json:"plan,omitempty"`
+	TierName string `json:"tierName,omitempty"`
+	TierID   string `json:"tierId,omitempty"`
+}
+
+// QuotaMetric 指标项 (用于 CPA 和 CPAMP 渲染指标数值)
+type QuotaMetric struct {
+	Key      string  `json:"key"`
+	Label    string  `json:"label"`
+	Value    float64 `json:"value"`
+	Unit     string  `json:"unit,omitempty"`
+	Format   string  `json:"format,omitempty"`
+	Currency string  `json:"currency,omitempty"`
+}
+
+// QuotaBucket 配额桶
+type QuotaBucket struct {
+	Window            string  `json:"window,omitempty"`
+	RemainingFraction float64 `json:"remainingFraction"`
+	ResetTime         string  `json:"resetTime,omitempty"`
+	Description       string  `json:"description,omitempty"`
+}
+
+// QuotaGroup 配额分组
+type QuotaGroup struct {
+	DisplayName string        `json:"displayName,omitempty"`
+	Buckets     []QuotaBucket `json:"buckets,omitempty"`
+}
+
 // QuotaFetchRequest 配额查询请求
 type QuotaFetchRequest struct {
+	AuthIndex   string          `json:"auth_index"`
 	AuthID      string          `json:"auth_id"`
 	Provider    string          `json:"provider"`
 	StorageJSON json.RawMessage `json:"storage_json"`
 }
 
-// QuotaFetchResponse 配额查询响应
+// QuotaFetchResponse 配额查询响应 (严格契合 CPA 宿主与 CPAMP 规范)
 type QuotaFetchResponse struct {
-	Provider       string         `json:"provider"`
-	RemainingQuota float64        `json:"remaining_quota"`
-	TotalQuota     float64        `json:"total_quota"`
-	IsUnlimited    bool           `json:"is_unlimited"`
-	ResetAt        time.Time      `json:"reset_at,omitempty"`
-	Currency       string         `json:"currency,omitempty"`
-	QuotaType      string         `json:"quota_type,omitempty"`
+	Subscription       *QuotaSubscription `json:"subscription,omitempty"`
+	Summary            []QuotaMetric      `json:"summary,omitempty"`
+	ServerTimeOffsetMs int64              `json:"serverTimeOffsetMs,omitempty"`
+	Groups             []QuotaGroup       `json:"groups,omitempty"`
+
+	// 兼容扩展字段
+	Provider       string         `json:"provider,omitempty"`
+	RemainingQuota float64        `json:"remaining_quota,omitempty"`
+	TotalQuota     float64        `json:"total_quota,omitempty"`
 	Details        map[string]any `json:"details,omitempty"`
 }
