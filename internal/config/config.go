@@ -212,8 +212,8 @@ func resolvePaths(cfg *PluginConfig, hostCtx cpaHostContext) {
 			}
 		}
 	} else if hostCtx.authDir != "" {
-		// 未显式配置：自动使用 CPA 的 auth-dir 下的 workbuddy 子目录 (处于挂载持久卷中)
-		rawAuthDir = filepath.Join(hostCtx.authDir, "workbuddy")
+		// 未显式配置：直接使用 CPA 宿主的 auth-dir (处于挂载持久卷中，保证 CPA 宿主与 CPAMP 均可读取并管理凭据)
+		rawAuthDir = hostCtx.authDir
 	} else if hostCtx.configDir != "" {
 		rawAuthDir = filepath.Join(hostCtx.configDir, "auths")
 	} else {

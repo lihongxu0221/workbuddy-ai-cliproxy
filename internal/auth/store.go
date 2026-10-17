@@ -61,8 +61,9 @@ func (s *Store) loadAllLocked() error {
 	// 1. 扫描当前主 authDir 目录
 	s.scanDirInto(s.authDir, loaded)
 
-	// 2. 扫描历史待迁移目录 (wb-auths, 相对 ./auths, 父级挂载卷目录)
+	// 2. 扫描历史待迁移目录 (workbuddy 子目录, wb-auths, 相对 ./auths, 父级挂载卷目录)
 	candidateDirs := []string{
+		filepath.Join(s.authDir, "workbuddy"),
 		"wb-auths",
 		"auths",
 		filepath.Dir(s.authDir),

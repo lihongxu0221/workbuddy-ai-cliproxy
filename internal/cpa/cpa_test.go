@@ -74,8 +74,8 @@ func TestModelStaticAndPrefixes(t *testing.T) {
 	var resp ModelResponse
 	_ = json.Unmarshal(env.Result, &resp)
 
-	if resp.Provider != "workbuddyai" {
-		t.Errorf("expected provider 'workbuddyai', got %s", resp.Provider)
+	if resp.Provider != "workbuddy" && resp.Provider != "workbuddyai" {
+		t.Errorf("expected provider 'workbuddy', got %s", resp.Provider)
 	}
 
 	modelMap := make(map[string]ModelInfo)
@@ -103,6 +103,26 @@ func TestModelStaticAndPrefixes(t *testing.T) {
 	}
 	if _, ok := modelMap["en/gpt-6-astra"]; !ok {
 		t.Errorf("expected prefixed model en/gpt-6-astra to be present")
+	}
+
+	// 验证 model.for_auth 专属凭据模型解析
+	authReqBytes, _ := json.Marshal(map[string]any{
+		"auth_id":       "test-global",
+		"auth_provider": "workbuddy",
+	})
+	respAuthBytes, errAuth := dispatcher.HandleMethod(context.Background(), MethodModelForAuth, authReqBytes, nil)
+	if errAuth != nil {
+		t.Fatalf("model.for_auth failed: %v", errAuth)
+	}
+	var envAuth Envelope
+	_ = json.Unmarshal(respAuthBytes, &envAuth)
+	var respAuth ModelResponse
+	_ = json.Unmarshal(envAuth.Result, &respAuth)
+	if len(respAuth.Models) == 0 {
+		t.Errorf("expected models for test-global in model.for_auth")
+	}
+	if respAuth.Provider != "workbuddy" {
+		t.Errorf("expected provider 'workbuddy', got %s", respAuth.Provider)
 	}
 }
 

@@ -91,8 +91,10 @@ func (d *Dispatcher) HandleMethod(ctx context.Context, method string, requestByt
 		growth.StopScheduler()
 		return okEnvelope(true)
 
-	case MethodModelStatic, MethodModelForAuth, MethodModelRegister:
-		return d.handleModels()
+	case MethodModelStatic, MethodModelRegister:
+		return d.handleStaticModels()
+	case MethodModelForAuth:
+		return d.handleModelsForAuth(requestBytes)
 
 	case MethodAuthIdentifier, MethodExecutorIdentifier, MethodQuotaIdentifier:
 		// 导出 workbuddyai，支持在 CPAMP 及 CPA 中展示为标准的 WorkBuddy AI OAuth Provider
@@ -184,12 +186,9 @@ func (d *Dispatcher) handleRegister(reqBytes []byte) ([]byte, error) {
 // Models
 // -----------------------------------------------------------------------------
 
-func (d *Dispatcher) handleModels() ([]byte, error) {
-	store := auth.GetStore()
-	accounts := store.List()
-
+func (d *Dispatcher) handleStaticModels() ([]byte, error) {
 	reg := models.GetRegistry()
-	all := reg.ListUsable(accounts)
+	all := reg.ListAll()
 
 	var result []ModelInfo
 	for _, m := range all {
@@ -201,11 +200,10 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 			contextLen = 128000
 		}
 
-		// 1. 注册原生未带前缀模型
 		result = append(result, ModelInfo{
 			ID:                         m.ID,
 			Object:                     "model",
-			OwnedBy:                    "workbuddyai",
+			OwnedBy:                    "workbuddy",
 			DisplayName:                m.DisplayName,
 			Name:                       m.ID,
 			SupportedGenerationMethods: []string{"chat"},
@@ -214,12 +212,11 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 			UserDefined:                true,
 		})
 
-		// 2. 依据 Realm 自动添加带路由前缀模型
 		if m.Realm == auth.RealmCN {
 			result = append(result, ModelInfo{
 				ID:                         "cn/" + m.ID,
 				Object:                     "model",
-				OwnedBy:                    "workbuddyai",
+				OwnedBy:                    "workbuddy",
 				DisplayName:                fmt.Sprintf("[CN] %s", m.DisplayName),
 				Name:                       "cn/" + m.ID,
 				SupportedGenerationMethods: []string{"chat"},
@@ -228,11 +225,10 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 				UserDefined:                true,
 			})
 		} else {
-			// Global / en 前缀: 支持 cb/ 与 en/
 			result = append(result, ModelInfo{
 				ID:                         "cb/" + m.ID,
 				Object:                     "model",
-				OwnedBy:                    "workbuddyai",
+				OwnedBy:                    "workbuddy",
 				DisplayName:                fmt.Sprintf("[Global] %s", m.DisplayName),
 				Name:                       "cb/" + m.ID,
 				SupportedGenerationMethods: []string{"chat"},
@@ -243,7 +239,7 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 			result = append(result, ModelInfo{
 				ID:                         "en/" + m.ID,
 				Object:                     "model",
-				OwnedBy:                    "workbuddyai",
+				OwnedBy:                    "workbuddy",
 				DisplayName:                fmt.Sprintf("[EN] %s", m.DisplayName),
 				Name:                       "en/" + m.ID,
 				SupportedGenerationMethods: []string{"chat"},
@@ -255,7 +251,122 @@ func (d *Dispatcher) handleModels() ([]byte, error) {
 	}
 
 	return okEnvelope(ModelResponse{
-		Provider: "workbuddyai",
+		Provider: "workbuddy",
+		Models:   result,
+	})
+}
+
+func (d *Dispatcher) handleModelsForAuth(reqBytes []byte) ([]byte, error) {
+	var req struct {
+		AuthID       string          `json:"auth_id"`
+		AuthProvider string          `json:"auth_provider"`
+		StorageJSON  json.RawMessage `json:"storage_json"`
+		Metadata     map[string]any  `json:"metadata"`
+		Attributes   map[string]string `json:"attributes"`
+	}
+	if len(reqBytes) > 0 {
+		_ = json.Unmarshal(reqBytes, &req)
+	}
+
+	provider := strings.TrimSpace(req.AuthProvider)
+	if provider == "" {
+		provider = "workbuddy"
+	}
+
+	store := auth.GetStore()
+	var targetAcc *auth.WorkBuddyAuth
+
+	// 1. 查找已知账号
+	if req.AuthID != "" {
+		targetAcc = store.FindAccount(req.AuthID)
+	}
+
+	// 2. 从 StorageJSON 解析
+	if targetAcc == nil && len(req.StorageJSON) > 0 {
+		if accs, err := auth.ParseAuthPayload(req.StorageJSON, "", ""); err == nil && len(accs) > 0 {
+			targetAcc = accs[0]
+			store.UpsertInMemory(targetAcc)
+		}
+	}
+
+	// 3. 推断该凭据归属 Realm (国内版 vs 国际版)
+	targetRealm := auth.RealmGlobal
+	if targetAcc != nil {
+		targetRealm = targetAcc.Realm
+	} else if strings.Contains(strings.ToLower(req.AuthID), "cn") {
+		targetRealm = auth.RealmCN
+	}
+
+	reg := models.GetRegistry()
+	var modelsForRealm []*models.ModelInfo
+	for _, m := range reg.ListAll() {
+		if m.Disabled {
+			continue
+		}
+		if m.Realm == targetRealm {
+			modelsForRealm = append(modelsForRealm, m)
+		}
+	}
+
+	var result []ModelInfo
+	for _, m := range modelsForRealm {
+		contextLen := int64(m.ContextLength)
+		if contextLen == 0 {
+			contextLen = 128000
+		}
+
+		result = append(result, ModelInfo{
+			ID:                         m.ID,
+			Object:                     "model",
+			OwnedBy:                    provider,
+			DisplayName:                m.DisplayName,
+			Name:                       m.ID,
+			SupportedGenerationMethods: []string{"chat"},
+			ContextLength:              contextLen,
+			MaxCompletionTokens:        8192,
+			UserDefined:                true,
+		})
+
+		if targetRealm == auth.RealmCN {
+			result = append(result, ModelInfo{
+				ID:                         "cn/" + m.ID,
+				Object:                     "model",
+				OwnedBy:                    provider,
+				DisplayName:                fmt.Sprintf("[CN] %s", m.DisplayName),
+				Name:                       "cn/" + m.ID,
+				SupportedGenerationMethods: []string{"chat"},
+				ContextLength:              contextLen,
+				MaxCompletionTokens:        8192,
+				UserDefined:                true,
+			})
+		} else {
+			result = append(result, ModelInfo{
+				ID:                         "cb/" + m.ID,
+				Object:                     "model",
+				OwnedBy:                    provider,
+				DisplayName:                fmt.Sprintf("[Global] %s", m.DisplayName),
+				Name:                       "cb/" + m.ID,
+				SupportedGenerationMethods: []string{"chat"},
+				ContextLength:              contextLen,
+				MaxCompletionTokens:        8192,
+				UserDefined:                true,
+			})
+			result = append(result, ModelInfo{
+				ID:                         "en/" + m.ID,
+				Object:                     "model",
+				OwnedBy:                    provider,
+				DisplayName:                fmt.Sprintf("[EN] %s", m.DisplayName),
+				Name:                       "en/" + m.ID,
+				SupportedGenerationMethods: []string{"chat"},
+				ContextLength:              contextLen,
+				MaxCompletionTokens:        8192,
+				UserDefined:                true,
+			})
+		}
+	}
+
+	return okEnvelope(ModelResponse{
+		Provider: provider,
 		Models:   result,
 	})
 }
