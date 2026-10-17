@@ -20,7 +20,7 @@ func TestResolvePathsWithHostAuthDir(t *testing.T) {
 	cfg := &PluginConfig{}
 	resolvePaths(cfg, hostCtx)
 
-	expectedAuth := fakeHostAuthDir
+	expectedAuth := filepath.Join(fakeHostAuthDir, "workbuddy")
 	expectedData := filepath.Join(fakeHostAuthDir, ".codebuddy_data")
 
 	if cfg.ResolvedAuthDir != expectedAuth {

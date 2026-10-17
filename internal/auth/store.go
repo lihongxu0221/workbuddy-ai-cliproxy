@@ -58,12 +58,14 @@ func (s *Store) loadAllLocked() error {
 
 	loaded := make(map[string]*WorkBuddyAuth)
 
-	// 1. 扫描当前主 authDir 目录
+	// 1. 扫描当前主 authDir 目录 (应为 CPA auth-dir 下的 workbuddy/ 子目录)
 	s.scanDirInto(s.authDir, loaded)
 
-	// 2. 扫描历史待迁移目录 (workbuddy 子目录, wb-auths, 相对 ./auths, 父级挂载卷目录)
+	// 2. 扫描历史/迁移目录 (CPA 根目录, wb-auths, 相对 ./auths)
+	//    注意：CPA 宿主会扫描 auth-dir 根目录下的 *.json 并当作自家凭据加载，
+	//    插件凭据若留在根目录会导致 CPAMP 中每个账号出现重复条目；
+	//    因此发现根目录中的本插件凭据文件时，自动迁移到子目录并清理根目录副本。
 	candidateDirs := []string{
-		filepath.Join(s.authDir, "workbuddy"),
 		"wb-auths",
 		"auths",
 		filepath.Dir(s.authDir),
@@ -81,12 +83,21 @@ func (s *Store) loadAllLocked() error {
 		oldAccounts := make(map[string]*WorkBuddyAuth)
 		s.scanDirInto(absCand, oldAccounts)
 
-		// 将旧目录发现的有效账号自动载入并迁移至主 authDir，确保平滑过渡不丢号
+		// 将旧目录发现的有效账号自动载入并迁移至主 authDir，并清理旧位置副本避免 CPA 重复扫描
 		for id, acc := range oldAccounts {
-			if _, exists := loaded[id]; !exists {
-				loaded[id] = acc
-				acc.FilePath = filepath.Join(s.authDir, fmt.Sprintf("%s.json", acc.ID))
-				_ = s.saveAccountToDisk(acc)
+			if existing, exists := loaded[id]; exists {
+				// 已存在于主目录：直接删除旧位置的重复副本
+				if acc.FilePath != "" && existing.FilePath != "" && acc.FilePath != existing.FilePath {
+					_ = os.Remove(acc.FilePath)
+				}
+				continue
+			}
+			loaded[id] = acc
+			oldPath := acc.FilePath
+			acc.FilePath = filepath.Join(s.authDir, fmt.Sprintf("%s.json", acc.ID))
+			// 先写盘迁移成功，再清理旧文件，保证数据安全
+			if err := s.saveAccountToDisk(acc); err == nil && oldPath != "" && oldPath != acc.FilePath {
+				_ = os.Remove(oldPath)
 			}
 		}
 	}

@@ -212,8 +212,10 @@ func resolvePaths(cfg *PluginConfig, hostCtx cpaHostContext) {
 			}
 		}
 	} else if hostCtx.authDir != "" {
-		// 未显式配置：直接使用 CPA 宿主的 auth-dir (处于挂载持久卷中，保证 CPA 宿主与 CPAMP 均可读取并管理凭据)
-		rawAuthDir = hostCtx.authDir
+		// 未显式配置：使用 CPA auth-dir 下的 workbuddy 子目录 (同样位于挂载持久卷内，容器重建不丢失)。
+		// 注意：CPA 宿主会扫描 auth-dir 根目录下的 *.json 并当作自家凭据加载，
+		// 插件凭据若放在根目录会导致 CPAMP 中每个账号出现重复条目，因此必须落在子目录中。
+		rawAuthDir = filepath.Join(hostCtx.authDir, "workbuddy")
 	} else if hostCtx.configDir != "" {
 		rawAuthDir = filepath.Join(hostCtx.configDir, "auths")
 	} else {
