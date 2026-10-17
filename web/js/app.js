@@ -44,8 +44,8 @@ const I18N = {
     cfg_prefix: "路由前缀：国内区 cn/，国际区 cb/、en/、wb/",
     modal_login_title: "WorkBuddy 授权登录",
     modal_login_select_label: "选择登录区域与服务",
-    opt_realm_global: "国际区 WorkBuddy AI (codebuddy.ai / Google / GitHub / 邮箱)",
-    opt_realm_cn: "国内区 CodeBuddy (copilot.tencent.com / 微信 / 手机扫码)",
+    opt_realm_global: "国际版 WorkBuddy AI (workbuddy.ai / codebuddy.ai / Google / GitHub / 邮箱)",
+    opt_realm_cn: "国内版 WorkBuddy (copilot.tencent.com / workbuddy.cn / 微信 / 手机扫码)",
     btn_fetch_auth_link: "⚡ 获取授权链接",
     login_active_tip: "授权链接已生成，请在新标签页中完成认证：",
     btn_open_login_tab: "🌐 打开登录页",
@@ -112,8 +112,8 @@ const I18N = {
     cfg_prefix: "Routing Prefixes: CN realm cn/, Global realm cb/, en/, wb/",
     modal_login_title: "WorkBuddy Authorization Login",
     modal_login_select_label: "Select Login Realm & Service",
-    opt_realm_global: "Global WorkBuddy AI (codebuddy.ai / Google / GitHub / Email)",
-    opt_realm_cn: "Domestic CodeBuddy (copilot.tencent.com / WeChat / Phone)",
+    opt_realm_global: "WorkBuddy AI (International / workbuddy.ai / codebuddy.ai / Google / GitHub / Email)",
+    opt_realm_cn: "WorkBuddy (Domestic CN / copilot.tencent.com / workbuddy.cn / WeChat / Phone)",
     btn_fetch_auth_link: "⚡ Get Auth Link",
     login_active_tip: "Authorization link generated. Please authenticate in the new tab:",
     btn_open_login_tab: "🌐 Open Login Tab",
@@ -403,8 +403,8 @@ async function loadAccounts() {
         const tr = document.createElement("tr");
 
         const realmBadge = acc.realm === "global"
-          ? `<span class="badge badge-global">Global</span>`
-          : `<span class="badge badge-cn">CN</span>`;
+          ? `<span class="badge badge-global">WorkBuddy AI</span>`
+          : `<span class="badge badge-cn">WorkBuddy</span>`;
 
         const planText = acc.plan || (currentLang === "en" ? "Free Tier" : "免费版");
         const planBadge = `<span class="badge badge-slot" style="background:rgba(64,158,255,0.1);color:var(--primary);border:1px solid rgba(64,158,255,0.25)">${planText}</span>`;
@@ -485,7 +485,7 @@ async function loadModels() {
         tr.innerHTML = `
           <td><code>${m.id}</code></td>
           <td>${m.displayName}</td>
-          <td><span class="badge ${m.realm === 'global' ? 'badge-global' : 'badge-cn'}">${m.realm}</span></td>
+          <td><span class="badge ${m.realm === 'global' ? 'badge-global' : 'badge-cn'}">${m.realm === 'global' ? 'WorkBuddy AI' : 'WorkBuddy'}</span></td>
           <td>${accs}</td>
           <td>${m.vendor}</td>
           <td>x${(m.creditMultiplier || 1.0).toFixed(2)}</td>

@@ -879,15 +879,19 @@ func (d *Dispatcher) handleQuotaFetch(ctx context.Context, raw []byte) ([]byte, 
 		pkgs = targetAcc.CreditPackages
 	}
 
-	tierName := "WorkBuddy AI"
+	productName := "WorkBuddy AI"
 	if targetAcc.Realm == auth.RealmCN {
-		tierName = "CodeBuddy 国内版"
+		productName = "WorkBuddy"
+	}
+	planDesc := targetAcc.Plan
+	if planDesc == "" {
+		planDesc = "免费版"
 	}
 
 	resp := QuotaFetchResponse{
 		Subscription: &QuotaSubscription{
-			Plan:     string(targetAcc.Realm),
-			TierName: tierName,
+			Plan:     productName,
+			TierName: fmt.Sprintf("%s (%s)", productName, planDesc),
 		},
 		Summary: []QuotaMetric{
 			{
@@ -904,6 +908,7 @@ func (d *Dispatcher) handleQuotaFetch(ctx context.Context, raw []byte) ([]byte, 
 		Details: map[string]any{
 			"realm":           targetAcc.Realm,
 			"user_id":         targetAcc.UserID,
+			"product":         productName,
 			"packages":        pkgs,
 			"remaining_coins": credits,
 		},
