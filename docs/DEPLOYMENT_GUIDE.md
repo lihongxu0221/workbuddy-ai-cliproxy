@@ -63,13 +63,20 @@ CPA 根目录/ (例如 D:\AILocal\Tools\CLIProxyAPI\Bin\)
 ### 3.2 配置文件 `config.yaml` 放置与填法说明
 > **注意**：本配置文件是 **CLIProxyAPI (CPA) 宿主程序的全局主配置文件**，放置在 `cli-proxy-api.exe` 同级目录下。
 > 如果你的 CPA 之前已经在运行，**无需新建文件**，只需打开已有 `config.yaml` 将下方配置节点合并进去即可。
+>
+> ⚠️ **Docker 部署关键注意点**：
+> Docker 部署时，**账号目录必须在挂载卷里**！
+> 插件默认会自动探测 CPA 宿主已挂载 Volume 的 `auth-dir`（例如 `/root/.cli-proxy-api`），并在其下自动使用 `workbuddy/` 存储账号凭据、使用 `.codebuddy_data/` 存储会话与审计数据，启动时日志会打印绝对路径 `[workbuddy] auth dir: /root/.cli-proxy-api/workbuddy`，确保容器销毁重建后账号不丢失。
 
 在 `config.yaml` 中完善如下节点：
 
 ```yaml
-# 1. 服务端口与凭据目录
+# 1. 服务端口与凭据目录 (Docker 部署时必须挂载数据卷)
 port: 8317
 auth-dir: "auths"
+
+# 全局网络代理 (国内服务器访问海外 codebuddy.ai 必需)
+# proxy-url: "socks5://172.19.0.1:10808"
 
 # 2. 客户端调用使用的 API Key
 api-keys:

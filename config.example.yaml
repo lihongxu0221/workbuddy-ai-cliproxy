@@ -17,11 +17,20 @@
 #    无需替换现有文件！只需将下方的 [remote-management] 和 [plugins] 两个节点
 #    复制并粘贴到你现有的 config.yaml 对应位置即可。
 #
+# 【⚠️ Docker 部署特别注意】：
+# Docker 容器化部署时，账号凭证目录 (auth_dir) 与数据目录 (data_dir) 必须在挂载卷 (Volume) 里！
+# 插件默认会自动探测 CPA 宿主挂载了 Volume 的 [auth-dir] (例如 /root/.cli-proxy-api)，
+# 并在其下自动创建与使用 workbuddy/ 与 .codebuddy_data/ 子目录，
+# 保证容器销毁或重建后账号与积分审计数据永不丢失。
+#
 # 【关于各项 Key 的说明】：
 # - remote-management.secret-key:
 #   CPA 宿主的远程管理密钥（Management Key）。
 #   当你使用 CPA Manager Plus (CPAMP) 面板连接 CPA 时，要求填写的 Management Key 就是它！
 #   首次配置时可填入你自定义的任意强密码（如 "MyAdminKey123"），CPA 首次启动时会自动将其哈希加密。
+# - plugins.configs.workbuddyai.management_key:
+#   显式填入与上方相同的 Management Key，插件服务端启动时会自动读取并注入前端控制台，
+#   彻底免除控制台点击授权或刷新时的 401 missing management key 报错。
 #
 # - api-keys:
 #   客户端（Cursor、Claude Code、VSCode 等）通过 OpenAI / Claude 协议请求模型时携带的 Bearer Token。
@@ -31,11 +40,14 @@
 # 服务监听端口
 port: 8317
 
-# 凭据存储目录
+# 凭据存储目录 (Docker 部署必须挂载 Volume, 如 /root/.cli-proxy-api)
 auth-dir: "auths"
 
 # 请求日志记录
 request-log: true
+
+# 全局网络代理 (国内服务器访问海外 codebuddy.ai 必需)
+# proxy-url: "socks5://172.19.0.1:10808"
 
 # 客户端调用 API Key 列表
 api-keys:
@@ -53,6 +65,12 @@ plugins:
   # 插件专用配置字典 (键名对应插件 ID: "workbuddyai" 或 "workbuddy")
   configs:
     workbuddyai:
+      # 管理密钥：插件自动提取并注入前端请求头中 (与上方 secret-key 一致)
+      management_key: "YourSuperSecretManagementKey"
+      # 账号凭证存储目录 (默认自动存入 CPA auth-dir 下的 workbuddy 子目录中)
+      # auth_dir: "/root/.cli-proxy-api/workbuddy"
+      # 数据持久化目录 (默认自动存入 CPA auth-dir 下的 .codebuddy_data 子目录中)
+      # data_dir: "/root/.cli-proxy-api/.codebuddy_data"
       # 国际区每日 30 积分成长中心自动打卡 (08:00/12:00/16:00/20:00 4-Tick 巡检)
       daily_bonus: true
       # 国内区每日 100 积分自动签到 (09:00/21:00)
@@ -67,15 +85,13 @@ plugins:
       session_affinity: true
       # 是否在日志中记录缓存命中追踪 (建议 false)
       cache_trace: false
-      # 插件本地数据持久化目录
-      data_dir: ".codebuddy_data"
 
     # workbuddy 别名兼容配置
     workbuddy:
+      management_key: "YourSuperSecretManagementKey"
       daily_bonus: true
       checkin_auto: true
       max_concurrency: 2
       cn_prefix: "cn/"
       global_prefix: "cb/"
       session_affinity: true
-      data_dir: ".codebuddy_data"

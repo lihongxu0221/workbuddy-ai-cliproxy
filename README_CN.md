@@ -224,12 +224,19 @@ cp bin/workbuddy.dll /path/to/cliproxyapi/plugins/
 #### 3.1 配置文件说明与放置位置
 > **重点**：配置文件即为 **CLIProxyAPI (CPA) 宿主程序主目录下的 `config.yaml`**（与 `cli-proxy-api.exe` 处于同一目录）。
 > 如果你的 CPA 之前已经在运行，**无需新建或替换文件**，只需打开已有 `config.yaml` 将下方节点合并进去即可。
+>
+> ⚠️ **Docker 部署特别说明**：
+> Docker 部署时，**账号目录必须在挂载卷里**！插件默认会自动探测并使用 CPA 宿主已挂载 Volume 的 `auth-dir`（例如 `/root/.cli-proxy-api`）下的 `workbuddy/` 与 `.codebuddy_data/` 子目录，保证容器销毁或重建后账号与积分审计数据永不丢失。启动日志会输出最终绝对路径：`[workbuddy] auth dir: /root/.cli-proxy-api/workbuddy`。
 
 在 `config.yaml` 中增加或完善如下配置：
 
 ```yaml
 port: 8317
+# 凭据存储目录 (Docker 部署时必须位于挂载卷内)
 auth-dir: "auths"
+
+# 全局网络代理 (国内服务器访问海外 codebuddy.ai 必需)
+# proxy-url: "socks5://172.19.0.1:10808"
 
 # 客户端调用使用的 API Key
 api-keys:
@@ -247,16 +254,18 @@ plugins:
   enabled: true
   configs:
     workbuddyai:
+      management_key: "YourSuperSecretManagementKey" # 插件自动提取并注入前端请求头，与上方 secret-key 保持一致
       daily_bonus: true      # 开启国际区每日 30 积分自动打卡 (08:00/12:00/16:00/20:00 4-Tick)
       checkin_auto: true     # 开启国内区每日 100 积分自动签到 (09:00/21:00)
       max_concurrency: 2     # 单账号最大并发数 (建议 2)
       cn_prefix: "cn/"       # 国内区模型前缀 (如 cn/glm-5.2)
       global_prefix: "cb/"   # 国际区模型前缀 (如 cb/gpt-6-astra 或 en/gpt-6-astra)
       session_affinity: true # 启用软会话粘性以保护 Prompt Cache
-      data_dir: ".codebuddy_data" # 插件持久化数据目录
+      data_dir: ".codebuddy_data" # 自动存入持久卷中
 
     # 兼容别名
     workbuddy:
+      management_key: "YourSuperSecretManagementKey"
       daily_bonus: true
       checkin_auto: true
       max_concurrency: 2

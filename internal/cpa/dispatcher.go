@@ -141,6 +141,10 @@ func (d *Dispatcher) handleRegister(reqBytes []byte) ([]byte, error) {
 		var rawMap map[string]any
 		if err := json.Unmarshal(req.ConfigYAML, &rawMap); err == nil {
 			_ = config.LoadFromMap(rawMap)
+			cfg := config.Get()
+			_ = cfg.EnsureDataDir()
+			_ = cfg.EnsureAuthDir()
+			_ = auth.GetStore().Init(config.GetAuthDir())
 		}
 	}
 

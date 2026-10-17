@@ -150,13 +150,19 @@ func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_a
 
 	cfg := config.Get()
 	_ = cfg.EnsureDataDir()
+	_ = cfg.EnsureAuthDir()
 
-	// 初始化本地凭据仓库
+	authDir := config.GetAuthDir()
+	dataDir := config.GetDataDir()
+	log.Printf("[workbuddy] auth dir: %s", authDir)
+	log.Printf("[workbuddy] data dir: %s", dataDir)
+
+	// 初始化本地凭据仓库 (绑定持久卷绝对路径)
 	store := auth.GetStore()
-	if err := store.Init("auths"); err != nil {
+	if err := store.Init(authDir); err != nil {
 		log.Printf("[workbuddy] warning: init auth store failed: %v", err)
 	} else {
-		log.Printf("[workbuddy] loaded %d auth accounts successfully", len(store.List()))
+		log.Printf("[workbuddy] loaded %d auth accounts successfully from %s", len(store.List()), authDir)
 	}
 
 	// 启动后台福利调度协程
@@ -247,9 +253,15 @@ func InitPlugin(ctxPtr unsafe.Pointer) unsafe.Pointer {
 
 	cfg := config.Get()
 	_ = cfg.EnsureDataDir()
+	_ = cfg.EnsureAuthDir()
+
+	authDir := config.GetAuthDir()
+	dataDir := config.GetDataDir()
+	log.Printf("[workbuddy] auth dir: %s", authDir)
+	log.Printf("[workbuddy] data dir: %s", dataDir)
 
 	store := auth.GetStore()
-	_ = store.Init("auths")
+	_ = store.Init(authDir)
 
 	growth.StartScheduler()
 	_ = models.GetRegistry()

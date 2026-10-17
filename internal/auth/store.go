@@ -37,23 +37,73 @@ func (s *Store) Init(authDir string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if authDir != "" {
-		s.authDir = authDir
+		absPath, err := filepath.Abs(authDir)
+		if err == nil {
+			s.authDir = absPath
+		} else {
+			s.authDir = authDir
+		}
 	}
 	return s.loadAllLocked()
 }
 
-// loadAllLocked 从 authDir 扫描并加载所有凭据文件 (支持 workbuddy*, codebuddy*, copilot*)
+// loadAllLocked 从 authDir 及候选迁移目录扫描并加载所有凭据文件 (支持 workbuddy*, codebuddy*, copilot*)
 func (s *Store) loadAllLocked() error {
-	if _, err := os.Stat(s.authDir); os.IsNotExist(err) {
-		return os.MkdirAll(s.authDir, 0755)
+	if s.authDir == "" {
+		s.authDir = "auths"
 	}
-
-	entries, err := os.ReadDir(s.authDir)
-	if err != nil {
-		return fmt.Errorf("read auth dir failed: %w", err)
+	if _, err := os.Stat(s.authDir); os.IsNotExist(err) {
+		_ = os.MkdirAll(s.authDir, 0755)
 	}
 
 	loaded := make(map[string]*WorkBuddyAuth)
+
+	// 1. 扫描当前主 authDir 目录
+	s.scanDirInto(s.authDir, loaded)
+
+	// 2. 扫描历史待迁移目录 (wb-auths, 相对 ./auths, 父级挂载卷目录)
+	candidateDirs := []string{
+		"wb-auths",
+		"auths",
+		filepath.Dir(s.authDir),
+	}
+
+	for _, cand := range candidateDirs {
+		if cand == "" {
+			continue
+		}
+		absCand, errCand := filepath.Abs(cand)
+		if errCand != nil || absCand == s.authDir {
+			continue
+		}
+
+		oldAccounts := make(map[string]*WorkBuddyAuth)
+		s.scanDirInto(absCand, oldAccounts)
+
+		// 将旧目录发现的有效账号自动载入并迁移至主 authDir，确保平滑过渡不丢号
+		for id, acc := range oldAccounts {
+			if _, exists := loaded[id]; !exists {
+				loaded[id] = acc
+				acc.FilePath = filepath.Join(s.authDir, fmt.Sprintf("%s.json", acc.ID))
+				_ = s.saveAccountToDisk(acc)
+			}
+		}
+	}
+
+	s.accounts = loaded
+	return nil
+}
+
+func (s *Store) scanDirInto(dir string, target map[string]*WorkBuddyAuth) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
 			continue
@@ -65,7 +115,7 @@ func (s *Store) loadAllLocked() error {
 			continue
 		}
 
-		fullPath := filepath.Join(s.authDir, entry.Name())
+		fullPath := filepath.Join(dir, entry.Name())
 		data, err := os.ReadFile(fullPath)
 		if err != nil {
 			continue
@@ -77,12 +127,9 @@ func (s *Store) loadAllLocked() error {
 		}
 
 		for _, acc := range parsedList {
-			loaded[acc.ID] = acc
+			target[acc.ID] = acc
 		}
 	}
-
-	s.accounts = loaded
-	return nil
 }
 
 // StoredAuthCodeBuddy 兼容 Sliverkiss / 官方 workbuddy.json 存储结构
@@ -288,10 +335,19 @@ func (s *Store) Save(acc *WorkBuddyAuth) error {
 		return fmt.Errorf("account ID cannot be empty")
 	}
 
-	if acc.FilePath == "" {
+	if acc.FilePath == "" || !strings.HasPrefix(acc.FilePath, s.authDir) {
 		acc.FilePath = filepath.Join(s.authDir, fmt.Sprintf("%s.json", acc.ID))
 	}
 
+	if err := s.saveAccountToDisk(acc); err != nil {
+		return err
+	}
+
+	s.accounts[acc.ID] = acc.Copy()
+	return nil
+}
+
+func (s *Store) saveAccountToDisk(acc *WorkBuddyAuth) error {
 	data, err := json.MarshalIndent(acc, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal account failed: %w", err)
@@ -305,8 +361,6 @@ func (s *Store) Save(acc *WorkBuddyAuth) error {
 	if err := os.Rename(tmpFile, acc.FilePath); err != nil {
 		return fmt.Errorf("atomic rename auth file failed: %w", err)
 	}
-
-	s.accounts[acc.ID] = acc.Copy()
 	return nil
 }
 

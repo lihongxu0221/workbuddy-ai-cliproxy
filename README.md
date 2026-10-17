@@ -161,9 +161,16 @@ cp bin/workbuddy.dll /path/to/cliproxyapi/plugins/
 
 The configuration file is **CLIProxyAPI's own `config.yaml`**, located in the root folder alongside `cli-proxy-api.exe`. If you already have an existing `config.yaml`, simply merge the following snippet into it:
 
+> ⚠️ **Docker Deployment Notice**:
+> During Docker containerized deployment, **the account directory must be inside a persistent volume**! The plugin automatically detects the volume-backed CPA `auth-dir` (such as `/root/.cli-proxy-api`) and uses the `workbuddy/` and `.codebuddy_data/` subdirectories under it, guaranteeing credentials and audit records persist across container recreation. The startup log outputs the exact path: `[workbuddy] auth dir: /root/.cli-proxy-api/workbuddy`.
+
 ```yaml
 port: 8317
+# Auth directory (must be on a persistent volume in Docker)
 auth-dir: "auths"
+
+# Outbound proxy (required for servers in China accessing codebuddy.ai)
+# proxy-url: "socks5://172.19.0.1:10808"
 
 # API keys for client access
 api-keys:
@@ -180,16 +187,18 @@ plugins:
   enabled: true
   configs:
     workbuddyai:
+      management_key: "YourSuperSecretManagementKey" # Auto-extracted and injected into Web UI headers
       daily_bonus: true      # Global 30-credit daily report (08:00/12:00/16:00/20:00 4-Tick)
       checkin_auto: true     # CN 100-credit daily check-in (09:00/21:00)
       max_concurrency: 2     # Max active concurrency per account (recommended: 2)
       cn_prefix: "cn/"       # CN realm prefix (e.g. cn/glm-5.2)
       global_prefix: "cb/"   # Global realm prefix (e.g. cb/gpt-6-astra or en/gpt-6-astra)
       session_affinity: true # Preserves Prompt Cache hotness
-      data_dir: ".codebuddy_data"
+      data_dir: ".codebuddy_data" # Auto-resolved inside persistent volume
 
     # Compatibility alias
     workbuddy:
+      management_key: "YourSuperSecretManagementKey"
       daily_bonus: true
       checkin_auto: true
       max_concurrency: 2

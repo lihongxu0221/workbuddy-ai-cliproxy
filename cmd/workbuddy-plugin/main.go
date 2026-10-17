@@ -46,16 +46,25 @@ func main() {
 	log.Printf("[workbuddy] starting standalone HTTP proxy server: %s", version.Info())
 
 	cfg := config.Get()
-	if *dataDir != "" {
+	if *dataDir != "" && *dataDir != ".codebuddy_data" {
 		cfg.DataDir = *dataDir
 	}
+	if *authDir != "" && *authDir != "auths" {
+		cfg.AuthDir = *authDir
+	}
 	_ = cfg.EnsureDataDir()
+	_ = cfg.EnsureAuthDir()
+
+	authDirToUse := config.GetAuthDir()
+	dataDirToUse := config.GetDataDir()
+	log.Printf("[workbuddy] auth dir: %s", authDirToUse)
+	log.Printf("[workbuddy] data dir: %s", dataDirToUse)
 
 	store := auth.GetStore()
-	if err := store.Init(*authDir); err != nil {
+	if err := store.Init(authDirToUse); err != nil {
 		log.Printf("[workbuddy] warning: init auth store failed: %v", err)
 	} else {
-		log.Printf("[workbuddy] loaded %d auth accounts successfully", len(store.List()))
+		log.Printf("[workbuddy] loaded %d auth accounts successfully from %s", len(store.List()), authDirToUse)
 	}
 
 	// 启动后台福利调度协程
