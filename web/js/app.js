@@ -1,9 +1,15 @@
 function getApiBase() {
   const p = window.location.pathname;
-  if (p.includes('/v0/resource/plugins/workbuddyai') || p.includes('/v0/management/workbuddyai')) {
+  if (p.includes('/v0/resource/plugins/workbuddyai')) {
+    return '/v0/resource/plugins/workbuddyai';
+  }
+  if (p.includes('/v0/resource/plugins/workbuddy')) {
+    return '/v0/resource/plugins/workbuddy';
+  }
+  if (p.includes('/v0/management/workbuddyai')) {
     return '/v0/management/workbuddyai';
   }
-  if (p.includes('/v0/resource/plugins/workbuddy') || p.includes('/v0/management/workbuddy')) {
+  if (p.includes('/v0/management/workbuddy')) {
     return '/v0/management/workbuddy';
   }
   return p.replace(/\/ui\/?$/, '');
@@ -23,10 +29,11 @@ function getManagementKey() {
 }
 
 function getAuthHeaders(extraHeaders = {}) {
-  const headers = { "Content-Type": "application/json", ...extraHeaders };
+  const headers = { "Accept": "application/json", ...extraHeaders };
   const key = getManagementKey();
   if (key) {
     headers["Authorization"] = "Bearer " + key;
+    headers["X-Management-Key"] = key;
   }
   return headers;
 }
@@ -36,7 +43,7 @@ async function apiFetch(url, options = {}) {
   let res = await fetch(url, options);
   if (res.status === 401) {
     const entered = prompt(
-      "检测到宿主启用了管理鉴权，请输入 CPA Management Key (即 config.yaml 中的 remote-management.secret-key):",
+      "检测到宿主管理接口需额外密码，请输入 CPA Management Key (即 config.yaml 中的 remote-management.secret-key):",
       getManagementKey()
     );
     if (entered) {
@@ -70,13 +77,13 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-set-key").addEventListener("click", () => {
     const current = getManagementKey();
     const entered = prompt(
-      "配置 CPA 宿主 Management Key (即 CPA config.yaml 中的 remote-management.secret-key)：\n(若未设置请留空)",
+      "配置 CPA 宿主 Management Key (即 CPA config.yaml 中的 remote-management.secret-key)：\n(常规内置访问无需设置)",
       current
     );
     if (entered !== null) {
       window.localStorage.setItem('cpa_management_key', entered.trim());
       try { window.localStorage.setItem('managementKey', entered.trim()); } catch (e) {}
-      alert("密钥已更新！");
+      alert("密钥已保存！");
       loadStats();
       loadAccounts();
     }
@@ -214,10 +221,7 @@ async function loadModels() {
 
 async function reportBonus(id) {
   try {
-    const res = await apiFetch(`${API_BASE}/actions/dailybonus`, {
-      method: "POST",
-      body: JSON.stringify({ id })
-    });
+    const res = await apiFetch(`${API_BASE}/actions/dailybonus?id=${encodeURIComponent(id)}`);
     const json = await res.json();
     alert(json.message || (json.code === 0 ? "Reported successfully" : json.error));
     loadAccounts();
@@ -228,10 +232,7 @@ async function reportBonus(id) {
 
 async function doCheckin(id) {
   try {
-    const res = await apiFetch(`${API_BASE}/actions/checkin`, {
-      method: "POST",
-      body: JSON.stringify({ id })
-    });
+    const res = await apiFetch(`${API_BASE}/actions/checkin?id=${encodeURIComponent(id)}`);
     const json = await res.json();
     alert(json.message || "Checkin completed!");
     loadAccounts();
@@ -242,10 +243,7 @@ async function doCheckin(id) {
 
 async function refreshAccount(id) {
   try {
-    const res = await apiFetch(`${API_BASE}/accounts/refresh`, {
-      method: "POST",
-      body: JSON.stringify({ id })
-    });
+    const res = await apiFetch(`${API_BASE}/accounts/refresh?id=${encodeURIComponent(id)}`);
     const json = await res.json();
     loadAccounts();
   } catch (e) {
@@ -256,7 +254,7 @@ async function refreshAccount(id) {
 async function deleteAccount(id) {
   if (!confirm(`Are you sure you want to delete ${id}?`)) return;
   try {
-    await apiFetch(`${API_BASE}/accounts/${id}`, { method: "DELETE" });
+    await apiFetch(`${API_BASE}/accounts/delete?id=${encodeURIComponent(id)}`);
     loadAccounts();
   } catch (e) {
     alert("Delete failed: " + e.message);
@@ -268,10 +266,7 @@ async function testModel(model) {
   const original = btn.innerText;
   btn.innerText = "Testing...";
   try {
-    const res = await apiFetch(`${API_BASE}/models/test`, {
-      method: "POST",
-      body: JSON.stringify({ model })
-    });
+    const res = await apiFetch(`${API_BASE}/models/test?model=${encodeURIComponent(model)}`);
     const json = await res.json();
     btn.innerText = original;
     if (json.code === 0) {
@@ -294,10 +289,8 @@ async function handleImportSubmit(e) {
   const realm = document.getElementById("import-realm").value;
 
   try {
-    const res = await apiFetch(`${API_BASE}/accounts/import`, {
-      method: "POST",
-      body: JSON.stringify({ token, refresh_token: refreshToken, user_id: userId, nickname, realm })
-    });
+    const url = `${API_BASE}/accounts/import?token=${encodeURIComponent(token)}&refresh_token=${encodeURIComponent(refreshToken)}&user_id=${encodeURIComponent(userId)}&nickname=${encodeURIComponent(nickname)}&realm=${encodeURIComponent(realm)}`;
+    const res = await apiFetch(url);
     const json = await res.json();
     if (json.code === 0) {
       document.getElementById("modal-import").classList.remove("active");
@@ -317,10 +310,7 @@ async function handleStartLogin() {
   btn.innerText = "正在获取链接...";
 
   try {
-    const res = await apiFetch(`${API_BASE}/actions/login-start?realm=${encodeURIComponent(realm)}`, {
-      method: "POST",
-      body: JSON.stringify({ realm })
-    });
+    const res = await apiFetch(`${API_BASE}/actions/login-start?realm=${encodeURIComponent(realm)}`);
     const json = await res.json();
     btn.disabled = false;
     btn.innerText = "⚡ 获取授权链接";
@@ -337,7 +327,7 @@ async function handleStartLogin() {
       // 自动新窗口打开
       window.open(authUrl, "_blank");
 
-      // 启动轮询
+      // 启动轮询 (纯 GET 访问)
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(async () => {
         try {

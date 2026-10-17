@@ -762,6 +762,20 @@ func (d *Dispatcher) handleManagementRegister() ([]byte, error) {
 			Menu:        "WorkBuddy 控制台",
 			Description: "WorkBuddy 账号池、多区域模型与积分监控控制台",
 		},
+		{Path: "/api/accounts"},
+		{Path: "/api/models"},
+		{Path: "/api/stats"},
+		{Path: "/api/login-start"},
+		{Path: "/api/login-poll"},
+		{Path: "/api/actions/login-start"},
+		{Path: "/api/actions/login-poll"},
+		{Path: "/api/actions/checkin"},
+		{Path: "/api/actions/dailybonus"},
+		{Path: "/api/actions/trial"},
+		{Path: "/api/accounts/refresh"},
+		{Path: "/api/accounts/delete"},
+		{Path: "/api/accounts/import"},
+		{Path: "/api/models/test"},
 	}
 
 	return okEnvelope(ManagementRegistrationResponse{

@@ -26,16 +26,20 @@ type actionLoginCtx struct {
 
 // HandleDailyBonusManual 手动触发国际区成长中心打卡
 func HandleDailyBonusManual(c *gin.Context) {
-	var body struct {
-		ID string `json:"id"` // 若为空则打卡全部 Global 账号
+	id := strings.TrimSpace(c.Query("id"))
+	if id == "" {
+		var body struct {
+			ID string `json:"id"` // 若为空则打卡全部 Global 账号
+		}
+		_ = c.ShouldBindJSON(&body)
+		id = strings.TrimSpace(body.ID)
 	}
-	_ = c.ShouldBindJSON(&body)
 
 	reporter := growth.NewGlobalBonusReporter()
 	store := auth.GetStore()
 
-	if body.ID != "" {
-		acc := store.GetByID(body.ID)
+	if id != "" {
+		acc := store.GetByID(id)
 		if acc == nil {
 			c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "account not found"})
 			return
@@ -55,16 +59,21 @@ func HandleDailyBonusManual(c *gin.Context) {
 
 // HandleCheckinManual 手动触发国内区每日签到
 func HandleCheckinManual(c *gin.Context) {
-	var body struct {
-		ID string `json:"id" binding:"required"`
+	id := strings.TrimSpace(c.Query("id"))
+	if id == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		id = strings.TrimSpace(body.ID)
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing id"})
 		return
 	}
 
 	store := auth.GetStore()
-	acc := store.GetByID(body.ID)
+	acc := store.GetByID(id)
 	if acc == nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "account not found"})
 		return
@@ -86,16 +95,21 @@ func HandleCheckinManual(c *gin.Context) {
 
 // HandleActivateTrial 手动为国际区新账号激活 250 积分 Expert 权益
 func HandleActivateTrial(c *gin.Context) {
-	var body struct {
-		ID string `json:"id" binding:"required"`
+	id := strings.TrimSpace(c.Query("id"))
+	if id == "" {
+		var body struct {
+			ID string `json:"id"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		id = strings.TrimSpace(body.ID)
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing id"})
 		return
 	}
 
 	store := auth.GetStore()
-	acc := store.GetByID(body.ID)
+	acc := store.GetByID(id)
 	if acc == nil {
 		c.JSON(http.StatusNotFound, gin.H{"code": 404, "error": "account not found"})
 		return

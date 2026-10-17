@@ -3,6 +3,7 @@ package management
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"workbuddy-ai-cliproxy/internal/executor"
 	"workbuddy-ai-cliproxy/internal/failover"
 	"workbuddy-ai-cliproxy/internal/models"
@@ -39,15 +40,20 @@ func HandleToggleModel(c *gin.Context) {
 
 // HandleTestModel 发送一条轻量真实对话以测试连通性并探查真实 Credit 扣费
 func HandleTestModel(c *gin.Context) {
-	var body struct {
-		Model string `json:"model" binding:"required"`
+	model := strings.TrimSpace(c.Query("model"))
+	if model == "" {
+		var body struct {
+			Model string `json:"model"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		model = strings.TrimSpace(body.Model)
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": err.Error()})
+	if model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing model parameter"})
 		return
 	}
 
-	parsed := models.ParsePrefix(body.Model)
+	parsed := models.ParsePrefix(model)
 	pipeline := failover.NewPipeline(executor.NewWorkBuddyExecutor())
 
 	testReq := map[string]any{
