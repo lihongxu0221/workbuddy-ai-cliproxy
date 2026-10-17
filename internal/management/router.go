@@ -2,7 +2,6 @@ package management
 
 import (
 	"net/http"
-	"workbuddy-ai-cliproxy/internal/config"
 	"workbuddy-ai-cliproxy/web"
 
 	"github.com/gin-gonic/gin"
@@ -10,19 +9,6 @@ import (
 
 // MountRoutes 在 CPA 宿主的 Gin 引擎上挂载 WorkBuddy 管理控制台与 REST API
 func MountRoutes(group *gin.RouterGroup) {
-	// 鉴权中间件 (可选检查 ManagementKey)
-	group.Use(func(c *gin.Context) {
-		cfgKey := config.Get().ManagementKey
-		if cfgKey != "" {
-			reqKey := c.GetHeader("Authorization")
-			if reqKey != "Bearer "+cfgKey && reqKey != cfgKey {
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid management key"})
-				return
-			}
-		}
-		c.Next()
-	})
-
 	// 1. 静态资产与前端 UI 直接返回自包含 HTML，彻底杜绝 301 重定向与资源丢失
 	renderUI := func(c *gin.Context) {
 		c.Header("Content-Type", "text/html; charset=utf-8")

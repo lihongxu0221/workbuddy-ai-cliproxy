@@ -9,6 +9,47 @@ function getApiBase() {
   return p.replace(/\/ui\/?$/, '');
 }
 
+function getManagementKey() {
+  try {
+    return window.localStorage?.getItem('cpa_management_key') ||
+           window.localStorage?.getItem('managementKey') ||
+           window.parent?.localStorage?.getItem('managementKey') ||
+           window.localStorage?.getItem('auth') ||
+           window.parent?.localStorage?.getItem('auth') ||
+           "";
+  } catch (e) {
+    return window.localStorage?.getItem('cpa_management_key') || "";
+  }
+}
+
+function getAuthHeaders(extraHeaders = {}) {
+  const headers = { "Content-Type": "application/json", ...extraHeaders };
+  const key = getManagementKey();
+  if (key) {
+    headers["Authorization"] = "Bearer " + key;
+  }
+  return headers;
+}
+
+async function apiFetch(url, options = {}) {
+  options.headers = getAuthHeaders(options.headers);
+  let res = await fetch(url, options);
+  if (res.status === 401) {
+    const entered = prompt(
+      "检测到宿主启用了管理鉴权，请输入 CPA Management Key (即 config.yaml 中的 remote-management.secret-key):",
+      getManagementKey()
+    );
+    if (entered) {
+      const cleanKey = entered.trim();
+      window.localStorage.setItem('cpa_management_key', cleanKey);
+      try { window.localStorage.setItem('managementKey', cleanKey); } catch (e) {}
+      options.headers = getAuthHeaders(options.headers);
+      res = await fetch(url, options);
+    }
+  }
+  return res;
+}
+
 const API_BASE = getApiBase();
 let currentTab = "accounts";
 let pollTimer = null;
@@ -24,6 +65,21 @@ document.addEventListener("DOMContentLoaded", () => {
     loadStats();
     loadAccounts();
     loadModels();
+  });
+
+  document.getElementById("btn-set-key").addEventListener("click", () => {
+    const current = getManagementKey();
+    const entered = prompt(
+      "配置 CPA 宿主 Management Key (即 CPA config.yaml 中的 remote-management.secret-key)：\n(若未设置请留空)",
+      current
+    );
+    if (entered !== null) {
+      window.localStorage.setItem('cpa_management_key', entered.trim());
+      try { window.localStorage.setItem('managementKey', entered.trim()); } catch (e) {}
+      alert("密钥已更新！");
+      loadStats();
+      loadAccounts();
+    }
   });
 
   document.getElementById("btn-open-import").addEventListener("click", () => {
@@ -65,7 +121,7 @@ function initTabs() {
 
 async function loadStats() {
   try {
-    const res = await fetch(`${API_BASE}/stats`);
+    const res = await apiFetch(`${API_BASE}/stats`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
       document.getElementById("stat-requests").innerText = json.data.today_requests || 0;
@@ -83,7 +139,7 @@ async function loadAccounts() {
   tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">Loading accounts...</td></tr>`;
 
   try {
-    const res = await fetch(`${API_BASE}/accounts`);
+    const res = await apiFetch(`${API_BASE}/accounts`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
       if (json.data.length === 0) {
@@ -134,7 +190,7 @@ async function loadAccounts() {
 async function loadModels() {
   const tbody = document.getElementById("models-tbody");
   try {
-    const res = await fetch(`${API_BASE}/models`);
+    const res = await apiFetch(`${API_BASE}/models`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
       tbody.innerHTML = "";
@@ -158,9 +214,8 @@ async function loadModels() {
 
 async function reportBonus(id) {
   try {
-    const res = await fetch(`${API_BASE}/actions/dailybonus`, {
+    const res = await apiFetch(`${API_BASE}/actions/dailybonus`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id })
     });
     const json = await res.json();
@@ -173,9 +228,8 @@ async function reportBonus(id) {
 
 async function doCheckin(id) {
   try {
-    const res = await fetch(`${API_BASE}/actions/checkin`, {
+    const res = await apiFetch(`${API_BASE}/actions/checkin`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id })
     });
     const json = await res.json();
@@ -188,9 +242,8 @@ async function doCheckin(id) {
 
 async function refreshAccount(id) {
   try {
-    const res = await fetch(`${API_BASE}/accounts/refresh`, {
+    const res = await apiFetch(`${API_BASE}/accounts/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id })
     });
     const json = await res.json();
@@ -203,7 +256,7 @@ async function refreshAccount(id) {
 async function deleteAccount(id) {
   if (!confirm(`Are you sure you want to delete ${id}?`)) return;
   try {
-    await fetch(`${API_BASE}/accounts/${id}`, { method: "DELETE" });
+    await apiFetch(`${API_BASE}/accounts/${id}`, { method: "DELETE" });
     loadAccounts();
   } catch (e) {
     alert("Delete failed: " + e.message);
@@ -215,9 +268,8 @@ async function testModel(model) {
   const original = btn.innerText;
   btn.innerText = "Testing...";
   try {
-    const res = await fetch(`${API_BASE}/models/test`, {
+    const res = await apiFetch(`${API_BASE}/models/test`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model })
     });
     const json = await res.json();
@@ -242,9 +294,8 @@ async function handleImportSubmit(e) {
   const realm = document.getElementById("import-realm").value;
 
   try {
-    const res = await fetch(`${API_BASE}/accounts/import`, {
+    const res = await apiFetch(`${API_BASE}/accounts/import`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, refresh_token: refreshToken, user_id: userId, nickname, realm })
     });
     const json = await res.json();
@@ -266,9 +317,8 @@ async function handleStartLogin() {
   btn.innerText = "正在获取链接...";
 
   try {
-    const res = await fetch(`${API_BASE}/actions/login-start?realm=${encodeURIComponent(realm)}`, {
+    const res = await apiFetch(`${API_BASE}/actions/login-start?realm=${encodeURIComponent(realm)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ realm })
     });
     const json = await res.json();
@@ -291,7 +341,7 @@ async function handleStartLogin() {
       if (pollTimer) clearInterval(pollTimer);
       pollTimer = setInterval(async () => {
         try {
-          const pollRes = await fetch(`${API_BASE}/actions/login-poll?state=${encodeURIComponent(state)}`);
+          const pollRes = await apiFetch(`${API_BASE}/actions/login-poll?state=${encodeURIComponent(state)}`);
           const pollJson = await pollRes.json();
           if (pollJson.status === "success") {
             clearInterval(pollTimer);
