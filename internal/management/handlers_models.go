@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"workbuddy-ai-cliproxy/internal/auth"
 	"workbuddy-ai-cliproxy/internal/executor"
 	"workbuddy-ai-cliproxy/internal/failover"
 	"workbuddy-ai-cliproxy/internal/models"
@@ -11,10 +12,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HandleListModels 返回所有模型信息 (只读 GET)
+// HandleListModels 返回当前已配置账号实际可用的模型信息 (遍历账号实际授权/可见模型)
 func HandleListModels(c *gin.Context) {
+	store := auth.GetStore()
+	accounts := store.List()
+
 	reg := models.GetRegistry()
-	list := reg.ListAll()
+	list := reg.SyncUsableModels(c.Request.Context(), accounts)
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": list,

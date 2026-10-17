@@ -181,8 +181,11 @@ func (d *Dispatcher) handleRegister(reqBytes []byte) ([]byte, error) {
 // -----------------------------------------------------------------------------
 
 func (d *Dispatcher) handleModels() ([]byte, error) {
+	store := auth.GetStore()
+	accounts := store.List()
+
 	reg := models.GetRegistry()
-	all := reg.ListAll()
+	all := reg.ListUsable(accounts)
 
 	var result []ModelInfo
 	for _, m := range all {

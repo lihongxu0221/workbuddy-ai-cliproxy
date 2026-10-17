@@ -55,6 +55,10 @@ func TestSchemaVersionNegotiation(t *testing.T) {
 }
 
 func TestModelStaticAndPrefixes(t *testing.T) {
+	store := auth.GetStore()
+	store.UpsertInMemory(&auth.WorkBuddyAuth{ID: "test-cn", Realm: auth.RealmCN, Nickname: "国内号"})
+	store.UpsertInMemory(&auth.WorkBuddyAuth{ID: "test-global", Realm: auth.RealmGlobal, Nickname: "国际号"})
+
 	dispatcher := GetDispatcher()
 	respBytes, err := dispatcher.HandleMethod(context.Background(), MethodModelStatic, nil, nil)
 	if err != nil {

@@ -71,6 +71,13 @@ document.addEventListener("DOMContentLoaded", () => {
     loadModels();
   });
 
+  const btnRefreshModels = document.getElementById("btn-refresh-models");
+  if (btnRefreshModels) {
+    btnRefreshModels.addEventListener("click", () => {
+      loadModels();
+    });
+  }
+
   document.getElementById("btn-set-key").addEventListener("click", () => {
     const current = getManagementKey();
     const entered = prompt(
@@ -193,26 +200,37 @@ async function loadAccounts() {
 
 async function loadModels() {
   const tbody = document.getElementById("models-tbody");
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">正在遍历当前账号并探测可用模型...</td></tr>`;
+
   try {
     const res = await apiFetch(`${API_BASE}/models`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
+      if (json.data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">当前账号池暂无可用的模型。请先在「账号池管理」中添加或扫码登录账号。</td></tr>`;
+        return;
+      }
       tbody.innerHTML = "";
       json.data.forEach(m => {
         const tr = document.createElement("tr");
+        const accs = m.availableAccounts && m.availableAccounts.length > 0
+          ? m.availableAccounts.map(a => `<span class="badge badge-slot">${a}</span>`).join(" ")
+          : `<span class="badge badge-slot">${m.realm}</span>`;
+
         tr.innerHTML = `
           <td><code>${m.id}</code></td>
           <td>${m.displayName}</td>
           <td><span class="badge ${m.realm === 'global' ? 'badge-global' : 'badge-cn'}">${m.realm}</span></td>
+          <td>${accs}</td>
           <td>${m.vendor}</td>
-          <td>x${m.creditMultiplier.toFixed(2)}</td>
+          <td>x${(m.creditMultiplier || 1.0).toFixed(2)}</td>
           <td><button class="btn-secondary btn-sm" onclick="testModel('${m.id}')">Test Ping</button></td>
         `;
         tbody.appendChild(tr);
       });
     }
   } catch (e) {
-    console.error("load models failed:", e);
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger)">Error: ${e.message}</td></tr>`;
   }
 }
 
