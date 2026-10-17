@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 	"workbuddy-ai-cliproxy/internal/auth"
+	"workbuddy-ai-cliproxy/internal/config"
 )
 
 // GlobalBonusReporter 国际区每日 30 积分打卡上报器
@@ -18,7 +19,7 @@ type GlobalBonusReporter struct {
 // NewGlobalBonusReporter 实例化打卡上报器
 func NewGlobalBonusReporter() *GlobalBonusReporter {
 	return &GlobalBonusReporter{
-		client: &http.Client{Timeout: 15 * time.Second},
+		client: config.NewHTTPClient(25*time.Second, ""),
 	}
 }
 

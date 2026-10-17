@@ -327,11 +327,9 @@ func (d *Dispatcher) handleAuthLoginStart(raw []byte) ([]byte, error) {
 		_ = json.Unmarshal(raw, &req)
 	}
 
+	loginClient := config.NewHTTPClient(30*time.Second, "")
 	jar, _ := cookiejar.New(nil)
-	loginClient := &http.Client{
-		Timeout: 20 * time.Second,
-		Jar:     jar,
-	}
+	loginClient.Jar = jar
 
 	isCN := false
 	if req.Provider == "workbuddy-cn" || req.Provider == "codebuddy" {

@@ -1,11 +1,15 @@
 package config
 
 import (
+	"crypto/tls"
 	"encoding/json"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
 
 // PluginConfig 插件全局可配置项
@@ -28,6 +32,8 @@ type PluginConfig struct {
 	DataDir string `json:"data_dir" yaml:"data_dir"`
 	// ManagementKey 管理 API 访问鉴权密钥 (CPA 宿主 remote-management.secret-key)
 	ManagementKey string `json:"management_key" yaml:"management_key"`
+	// ProxyURL 代理服务器地址 (如 "socks5://172.19.0.1:10808" 或 "http://127.0.0.1:7890")
+	ProxyURL string `json:"proxy_url" yaml:"proxy_url"`
 	// SelfURL CPA 宿主基地址 (用于触发宿主重载等回调)
 	SelfURL string `json:"self_url" yaml:"self_url"`
 }
@@ -45,6 +51,7 @@ func DefaultConfig() *PluginConfig {
 	}
 
 	mgmtKey := detectInitialManagementKey()
+	proxyURL := detectInitialProxyURL()
 
 	return &PluginConfig{
 		DailyBonus:      true,
@@ -56,6 +63,7 @@ func DefaultConfig() *PluginConfig {
 		CacheTrace:      os.Getenv("WB_CACHE_TRACE") == "1",
 		DataDir:         dataDir,
 		ManagementKey:   mgmtKey,
+		ProxyURL:        proxyURL,
 		SelfURL:         os.Getenv("WB_SELF_URL"),
 	}
 }
@@ -82,7 +90,6 @@ func detectInitialManagementKey() string {
 		if err != nil {
 			continue
 		}
-		// 简单提取未被 bcrypt 的明文密钥
 		lines := strings.Split(string(data), "\n")
 		for _, line := range lines {
 			line = strings.TrimSpace(line)
@@ -97,6 +104,44 @@ func detectInitialManagementKey() string {
 				val := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "secret-key:"), "secret_key:"))
 				val = strings.Trim(val, `"' `)
 				if val != "" && !strings.HasPrefix(val, "$2a$") {
+					return val
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// detectInitialProxyURL 自动探测环境或 CPA 宿主全局配置中的 proxy-url (如 socks5://172.19.0.1:10808)
+func detectInitialProxyURL() string {
+	// 1. 优先读取系统代理环境变量
+	proxyEnvs := []string{"WB_PROXY_URL", "ALL_PROXY", "all_proxy", "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"}
+	for _, env := range proxyEnvs {
+		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
+			return v
+		}
+	}
+
+	// 2. 探测 CPA 宿主 config.yaml 中的 proxy-url
+	candidateFiles := []string{
+		"config.yaml",
+		filepath.Join("..", "config.yaml"),
+		filepath.Join("..", "..", "config.yaml"),
+	}
+
+	for _, f := range candidateFiles {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "proxy-url:") || strings.HasPrefix(line, "proxy_url:") {
+				val := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "proxy-url:"), "proxy_url:"))
+				val = strings.Trim(val, `"' `)
+				if val != "" {
 					return val
 				}
 			}
@@ -121,6 +166,45 @@ func GetManagementKey() string {
 		return cfg.ManagementKey
 	}
 	return detectInitialManagementKey()
+}
+
+// GetProxyURL 获取当前生效的代理地址 (优先用户配置，兜底宿主 proxy-url)
+func GetProxyURL() string {
+	cfg := Get()
+	if cfg.ProxyURL != "" {
+		return cfg.ProxyURL
+	}
+	return detectInitialProxyURL()
+}
+
+// NewHTTPClient 创建统一的具有代理支持与 TLS1.2+ 的 HTTP 客户端
+func NewHTTPClient(timeout time.Duration, proxyOverride ...string) *http.Client {
+	proxyStr := GetProxyURL()
+	if len(proxyOverride) > 0 && strings.TrimSpace(proxyOverride[0]) != "" {
+		proxyStr = strings.TrimSpace(proxyOverride[0])
+	}
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 20,
+		IdleConnTimeout:     90 * time.Second,
+	}
+
+	if proxyStr != "" {
+		if parsed, err := url.Parse(proxyStr); err == nil {
+			transport.Proxy = http.ProxyURL(parsed)
+		}
+	} else {
+		transport.Proxy = http.ProxyFromEnvironment
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   timeout,
+	}
 }
 
 // Update 更新并合并运行时配置
@@ -152,6 +236,17 @@ func LoadFromMap(raw map[string]any) error {
 		if v, ok := raw[alias]; ok {
 			if strVal, isStr := v.(string); isStr && strings.TrimSpace(strVal) != "" {
 				cfg.ManagementKey = strings.TrimSpace(strVal)
+				break
+			}
+		}
+	}
+
+	// 兼容多种 proxy 命名变体
+	proxyAliases := []string{"proxy_url", "proxy-url", "proxyUrl", "proxy"}
+	for _, alias := range proxyAliases {
+		if v, ok := raw[alias]; ok {
+			if strVal, isStr := v.(string); isStr && strings.TrimSpace(strVal) != "" {
+				cfg.ProxyURL = strings.TrimSpace(strVal)
 				break
 			}
 		}

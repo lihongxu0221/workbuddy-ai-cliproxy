@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 	"workbuddy-ai-cliproxy/internal/auth"
+	"workbuddy-ai-cliproxy/internal/config"
 )
 
 // ExpertTrialActivator 国际区 250 积分 Expert 权益激活器
@@ -18,7 +19,7 @@ type ExpertTrialActivator struct {
 // NewExpertTrialActivator 实例化激活器
 func NewExpertTrialActivator() *ExpertTrialActivator {
 	return &ExpertTrialActivator{
-		client: &http.Client{Timeout: 15 * time.Second},
+		client: config.NewHTTPClient(25*time.Second, ""),
 	}
 }
 

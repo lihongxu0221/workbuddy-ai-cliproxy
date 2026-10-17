@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"time"
+	"workbuddy-ai-cliproxy/internal/config"
 )
 
 // Refresher 处理 Token 过期续签与保活
@@ -18,9 +19,7 @@ type Refresher struct {
 // NewRefresher 实例化刷新器
 func NewRefresher() *Refresher {
 	return &Refresher{
-		client: &http.Client{
-			Timeout: 20 * time.Second,
-		},
+		client: config.NewHTTPClient(25 * time.Second),
 	}
 }
 
@@ -56,13 +55,25 @@ func (r *Refresher) refreshCN(ctx context.Context, acc *WorkBuddyAuth) (*WorkBud
 	req.Header.Set("Origin", "https://www.codebuddy.cn")
 	req.Header.Set("Referer", "https://www.codebuddy.cn/")
 	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+	req.Header.Set("X-Product", "SaaS")
+	req.Header.Set("X-Domain", "copilot.tencent.com")
 	req.Header.Set("X-Refresh-Token", acc.RefreshToken)
 	req.Header.Set("X-Auth-Refresh-Source", "workbuddy")
+
 	if acc.EnterpriseID != "" {
 		req.Header.Set("X-Enterprise-Id", acc.EnterpriseID)
+	} else {
+		req.Header.Set("X-No-Enterprise-Id", "1")
 	}
+	if acc.UserID != "" {
+		req.Header.Set("X-User-Id", acc.UserID)
+	} else {
+		req.Header.Set("X-No-User-Id", "1")
+	}
+	req.Header.Set("X-No-Department-Info", "1")
 
-	resp, err := r.client.Do(req)
+	client := config.NewHTTPClient(25*time.Second, acc.ProxyURL)
+	resp, err := client.Do(req)
 	if err != nil {
 		return acc, fmt.Errorf("do cn refresh failed: %w", err)
 	}
@@ -134,7 +145,8 @@ func (r *Refresher) refreshGlobal(ctx context.Context, acc *WorkBuddyAuth) (*Wor
 		req.Header.Set("X-User-Id", acc.UserID)
 	}
 
-	resp, err := r.client.Do(req)
+	client := config.NewHTTPClient(25*time.Second, acc.ProxyURL)
+	resp, err := client.Do(req)
 	if err != nil {
 		return acc, fmt.Errorf("do global refresh failed: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 	"workbuddy-ai-cliproxy/internal/auth"
+	"workbuddy-ai-cliproxy/internal/config"
 )
 
 // DynamicFetcher 负责从 WorkBuddy 上游拉取最新上架模型列表
@@ -17,7 +18,7 @@ type DynamicFetcher struct {
 // NewDynamicFetcher 实例化拉取器
 func NewDynamicFetcher() *DynamicFetcher {
 	return &DynamicFetcher{
-		client: &http.Client{Timeout: 15 * time.Second},
+		client: config.NewHTTPClient(25 * time.Second),
 	}
 }
 
@@ -39,6 +40,10 @@ type upstreamModelResp struct {
 
 // FetchModelsByAccount 使用指定账号的凭据与 UA 获取其可见的模型目录
 func (f *DynamicFetcher) FetchModelsByAccount(ctx context.Context, acc *auth.WorkBuddyAuth) ([]*ModelInfo, error) {
+	if acc == nil {
+		return nil, fmt.Errorf("account is nil")
+	}
+
 	apiURL := fmt.Sprintf("%s/v2/enterprises/personal/models", acc.BaseURL())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
@@ -46,13 +51,38 @@ func (f *DynamicFetcher) FetchModelsByAccount(ctx context.Context, acc *auth.Wor
 	}
 
 	req.Header.Set("Authorization", "Bearer "+acc.AccessToken)
-	req.Header.Set("User-Agent", "WorkBuddy/1.2.8 (Windows NT 10.0; Win64; x64) Electron/32.2.1")
-	req.Header.Set("X-Domain", acc.Domain())
-	if acc.UserID != "" {
-		req.Header.Set("X-User-Id", acc.UserID)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+
+	if acc.Realm == auth.RealmCN {
+		req.Header.Set("User-Agent", "CLI/2.63.2 CodeBuddy/2.63.2")
+		req.Header.Set("Origin", "https://www.codebuddy.cn")
+		req.Header.Set("Referer", "https://www.codebuddy.cn/")
+		req.Header.Set("X-Requested-With", "XMLHttpRequest")
+		req.Header.Set("X-Product", "SaaS")
+		req.Header.Set("X-Domain", "copilot.tencent.com")
+		if acc.UserID != "" {
+			req.Header.Set("X-User-Id", acc.UserID)
+		} else {
+			req.Header.Set("X-No-User-Id", "1")
+		}
+		if acc.EnterpriseID != "" {
+			req.Header.Set("X-Enterprise-Id", acc.EnterpriseID)
+		} else {
+			req.Header.Set("X-No-Enterprise-Id", "1")
+		}
+		req.Header.Set("X-No-Department-Info", "1")
+	} else {
+		req.Header.Set("User-Agent", "WorkBuddy/1.2.8 (Windows NT 10.0; Win64; x64) Electron/32.2.1")
+		req.Header.Set("Origin", "https://www.codebuddy.ai")
+		req.Header.Set("Referer", "https://www.codebuddy.ai/")
+		req.Header.Set("X-Domain", acc.Domain())
+		if acc.UserID != "" {
+			req.Header.Set("X-User-Id", acc.UserID)
+		}
 	}
 
-	resp, err := f.client.Do(req)
+	client := config.NewHTTPClient(25*time.Second, acc.ProxyURL)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fetch models request failed: %w", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 	"workbuddy-ai-cliproxy/internal/auth"
+	"workbuddy-ai-cliproxy/internal/config"
 	"workbuddy-ai-cliproxy/internal/growth"
 
 	"github.com/gin-gonic/gin"
@@ -171,7 +172,7 @@ func HandleLoginStart(c *gin.Context) {
 		origin = "https://www.codebuddy.cn"
 	}
 
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := config.NewHTTPClient(30 * time.Second, "")
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, endpoint, bytes.NewReader([]byte("{}")))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": err.Error()})
@@ -260,7 +261,7 @@ func HandleLoginPoll(c *gin.Context) {
 	}
 
 	tokenURL := fmt.Sprintf("%s/v2/plugin/auth/token?state=%s", baseURL, state)
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := config.NewHTTPClient(20 * time.Second, "")
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, tokenURL, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "error": err.Error()})
