@@ -20,6 +20,7 @@ const I18N = {
     tab_settings: "运行配置",
     th_acc_info: "账号信息 / UID",
     th_realm: "区域分类",
+    th_plan: "当前套餐",
     th_credits: "积分余额 (Credits)",
     th_slots: "活跃并发",
     th_status: "健康状态",
@@ -87,6 +88,7 @@ const I18N = {
     tab_settings: "Settings",
     th_acc_info: "Account / UID",
     th_realm: "Realm",
+    th_plan: "Plan",
     th_credits: "Credit Balance",
     th_slots: "Active Slots",
     th_status: "Status",
@@ -386,14 +388,14 @@ async function loadStats() {
 
 async function loadAccounts() {
   const tbody = document.getElementById("accounts-tbody");
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">${t("msg_loading_accounts")}</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${t("msg_loading_accounts")}</td></tr>`;
 
   try {
     const res = await apiFetch(`${API_BASE}/accounts`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
       if (json.data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted)">${t("msg_no_accounts")}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${t("msg_no_accounts")}</td></tr>`;
         return;
       }
       tbody.innerHTML = "";
@@ -403,6 +405,9 @@ async function loadAccounts() {
         const realmBadge = acc.realm === "global"
           ? `<span class="badge badge-global">Global</span>`
           : `<span class="badge badge-cn">CN</span>`;
+
+        const planText = acc.plan || (currentLang === "en" ? "Free Tier" : "免费版");
+        const planBadge = `<span class="badge badge-slot" style="background:rgba(64,158,255,0.1);color:var(--primary);border:1px solid rgba(64,158,255,0.25)">${planText}</span>`;
 
         const statusBadge = acc.is_quarantined
           ? `<span class="badge badge-danger">Quarantined (${acc.quarantine_info})</span>`
@@ -432,9 +437,10 @@ async function loadAccounts() {
         tr.innerHTML = `
           <td><strong>${acc.nickname || acc.id}</strong><br><small style="color:var(--text-muted)">${acc.user_id}</small></td>
           <td>${realmBadge}</td>
+          <td>${planBadge}</td>
           <td>
             <div class="progress-bar-bg"><div class="progress-bar-fill" style="width: ${Math.min(acc.credits, 100)}%"></div></div>
-            <strong>${acc.credits.toFixed(1)}</strong>
+            <strong style="font-size:14px">${acc.credits.toFixed(2)}</strong>
             ${packageBreakdownHTML}
           </td>
           <td>${slotBadge}</td>
@@ -453,7 +459,7 @@ async function loadAccounts() {
       });
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger)">Error: ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger)">Error: ${e.message}</td></tr>`;
   }
 }
 
@@ -533,7 +539,7 @@ async function refreshAccount(id) {
     });
     const json = await res.json();
     if (json.code === 0 && json.data) {
-      alert(t("alert_refresh_ok") + (json.data.credits !== undefined ? json.data.credits : "N/A"));
+      alert(t("alert_refresh_ok") + json.data.credits + (json.data.plan ? " [" + json.data.plan + "]" : ""));
     } else {
       alert("Refresh: " + (json.error || json.message));
     }

@@ -4,6 +4,84 @@ import (
 	"testing"
 )
 
+func TestParseSummaryResponse(t *testing.T) {
+	// 官方 get-user-resource-summary 结构样例 (带套餐名称与精确余额 328.84)
+	summaryJSON := `{
+		"code": 0,
+		"msg": "success",
+		"data": {
+			"SubscriptionPackageCode": "TCACA_free_monthly_001",
+			"SubscriptionPackageName": "免费版",
+			"IsPaidUser": false,
+			"Packages": [
+				{
+					"PackageCode": "TCACA_free_monthly_001",
+					"PackageName": "月度免费配额",
+					"CycleTotalCapacity": 1000.0,
+					"CycleRemainCapacity": 328.84,
+					"CycleUsedCapacity": 671.16
+				}
+			]
+		}
+	}`
+
+	plan, credits, pkgs, err := parseSummaryResponse([]byte(summaryJSON))
+	if err != nil {
+		t.Fatalf("parseSummaryResponse failed: %v", err)
+	}
+
+	if plan != "免费版" {
+		t.Errorf("expected plan '免费版', got '%s'", plan)
+	}
+
+	if credits != 328.84 {
+		t.Errorf("expected credits 328.84, got %f", credits)
+	}
+
+	if len(pkgs) != 1 || pkgs[0].RemainingCredits != 328.84 {
+		t.Errorf("expected 1 package with 328.84, got %v", pkgs)
+	}
+}
+
+func TestParsePackagesResponse(t *testing.T) {
+	// 官方 get-user-resource-free-packages 结构样例
+	freeJSON := `{
+		"code": 0,
+		"data": {
+			"TotalCount": 2,
+			"Accounts": [
+				{
+					"ResourceId": "res-bonus-01",
+					"PackageCode": "TCACA_bonus_30",
+					"PackageName": "平台奖励积分 (Bonus Pack)",
+					"CycleCapacityRemainPrecise": 30.0,
+					"CycleCapacitySizePrecise": 30.0
+				},
+				{
+					"ResourceId": "res-checkin-02",
+					"PackageCode": "TCACA_checkin_100",
+					"PackageName": "每日签到奖励",
+					"CycleCapacityRemainPrecise": 100.0,
+					"CycleCapacitySizePrecise": 100.0
+				}
+			]
+		}
+	}`
+
+	credits, pkgs, err := parsePackagesResponse([]byte(freeJSON))
+	if err != nil {
+		t.Fatalf("parsePackagesResponse failed: %v", err)
+	}
+
+	if credits != 130.0 {
+		t.Errorf("expected total credits 130.0, got %f", credits)
+	}
+
+	if len(pkgs) != 2 {
+		t.Errorf("expected 2 packages, got %d", len(pkgs))
+	}
+}
+
 func TestParseFlexibleBalance(t *testing.T) {
 	// 1. 标准 camelCase totalCredits 与 packages
 	json1 := `{

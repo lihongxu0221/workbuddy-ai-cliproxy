@@ -16,6 +16,7 @@ type AccountDTO struct {
 	UserID         string               `json:"user_id"`
 	Email          string               `json:"email"`
 	Nickname       string               `json:"nickname"`
+	Plan           string               `json:"plan"`
 	Credits        float64              `json:"credits"`
 	CreditPackages []auth.CreditPackage `json:"credit_packages"`
 	Disabled       bool                 `json:"disabled"`
@@ -35,12 +36,17 @@ func HandleListAccounts(c *gin.Context) {
 
 	for _, a := range rawList {
 		isQ, qReason := quarantine.IsQuarantined(a.ID, "")
+		planName := a.Plan
+		if planName == "" {
+			planName = "免费版"
+		}
 		dtoList = append(dtoList, AccountDTO{
 			ID:             a.ID,
 			Realm:          a.Realm,
 			UserID:         a.UserID,
 			Email:          a.Email,
 			Nickname:       a.Nickname,
+			Plan:           planName,
 			Credits:        a.Credits,
 			CreditPackages: a.CreditPackages,
 			Disabled:       a.Disabled,
@@ -126,10 +132,16 @@ func HandleRefreshAccount(c *gin.Context) {
 		return
 	}
 
+	planName := acc.Plan
+	if planName == "" {
+		planName = "免费版"
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"code": 0,
 		"data": gin.H{
 			"id":       acc.ID,
+			"plan":     planName,
 			"credits":  credits,
 			"packages": pkgs,
 		},

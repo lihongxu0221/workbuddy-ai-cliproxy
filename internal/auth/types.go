@@ -48,6 +48,8 @@ type WorkBuddyAuth struct {
 	Email string `json:"email,omitempty"`
 	// Nickname 用户显示昵称
 	Nickname string `json:"nickname,omitempty"`
+	// Plan 用户订阅套餐 (例如 "免费版", "Pro", "Expert", "团队版")
+	Plan string `json:"plan,omitempty"`
 	// Credits 当前可用总积分余额
 	Credits float64 `json:"credits"`
 	// CreditPackages 详细积分包列表
@@ -108,6 +110,7 @@ func (a *WorkBuddyAuth) Copy() *WorkBuddyAuth {
 		EnterpriseID:   a.EnterpriseID,
 		Email:          a.Email,
 		Nickname:       a.Nickname,
+		Plan:           a.Plan,
 		Credits:        a.Credits,
 		CreditPackages: a.CreditPackages,
 		Disabled:       a.Disabled,
