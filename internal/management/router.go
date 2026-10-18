@@ -65,7 +65,9 @@ func MountRoutes(group *gin.RouterGroup) {
 	group.GET("/accounts", HandleListAccounts)
 	group.POST("/accounts/import", HandleImportAccount)
 	group.POST("/accounts/refresh", HandleRefreshAccount)
-	group.DELETE("/accounts/:id", HandleDeleteAccount)
+	// 删除账号：CPA v8 插件路由只做精确匹配 (不支持 :id 参数)，故采用固定路径 + JSON 请求体
+	group.POST("/accounts/delete", HandleDeleteAccount)
+	group.DELETE("/accounts/:id", HandleDeleteAccount) // 独立 CLI 模式兼容
 
 	// 4. 动作与打卡执行 API (严格限制通过 POST 执行改动)
 	group.POST("/actions/dailybonus", HandleDailyBonusManual)

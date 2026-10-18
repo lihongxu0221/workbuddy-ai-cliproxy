@@ -148,11 +148,21 @@ func HandleRefreshAccount(c *gin.Context) {
 	})
 }
 
-// HandleDeleteAccount 删除账号 (严格要求 DELETE /accounts/:id)
+// HandleDeleteAccount 删除账号
+// 主路径：POST /accounts/delete (id 放 JSON 请求体) —— CPA v8 插件路由只做精确匹配，不支持 :id 参数，
+// 因此与 import / refresh 保持一致的固定路径写法；独立 CLI 模式下仍兼容 DELETE /accounts/:id。
 func HandleDeleteAccount(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
 	if id == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing account id parameter in path"})
+		var body struct {
+			ID string `json:"id"`
+		}
+		if err := c.ShouldBindJSON(&body); err == nil {
+			id = strings.TrimSpace(body.ID)
+		}
+	}
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "error": "missing account id (JSON body field 'id')"})
 		return
 	}
 
@@ -161,5 +171,5 @@ func HandleDeleteAccount(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "deleted"})
+	c.JSON(http.StatusOK, gin.H{"code": 0, "message": "deleted", "data": gin.H{"id": id}})
 }

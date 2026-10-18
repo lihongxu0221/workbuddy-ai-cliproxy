@@ -552,7 +552,11 @@ async function refreshAccount(id) {
 async function deleteAccount(id) {
   if (!confirm(`Are you sure you want to delete ${id}?`)) return;
   try {
-    await apiFetch(`${API_BASE}/accounts/${encodeURIComponent(id)}`, { method: "DELETE" });
+    // CPA v8 插件路由只支持精确匹配，故用固定路径 POST /accounts/delete，id 放请求体
+    await apiFetch(`${API_BASE}/accounts/delete`, {
+      method: "POST",
+      body: JSON.stringify({ id })
+    });
     loadAccounts();
   } catch (e) {
     alert("Delete failed: " + e.message);
