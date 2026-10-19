@@ -6,11 +6,12 @@ import (
 	"io"
 	"strings"
 	"time"
+	"workbuddy-ai-cliproxy/internal/models"
 )
 
-// RewriteSystemForUpstream 敏感词与思考模型策略重写
-// 绕过腾讯 CodeBuddy 针对 Claude Code 模板的精确关键字拦截，并对 hy3 开启最大深度思考
-func RewriteSystemForUpstream(payload []byte) []byte {
+// RewriteSystemForUpstream 敏感词与思考模型策略重写，并对国内版与全区请求体执行结构化规范化
+// 解决 11101 Unmarshal chat params failed 错误：确保 messages 中的 content 字段为结构化数据 [{"type":"text","text":"..."}]，并去除模型路由前缀
+func RewriteSystemForUpstream(payload []byte, targetModel ...string) []byte {
 	if len(payload) == 0 {
 		return payload
 	}
@@ -18,20 +19,79 @@ func RewriteSystemForUpstream(payload []byte) []byte {
 	if json.Unmarshal(payload, &obj) != nil {
 		return payload
 	}
-	messages, _ := obj["messages"].([]any)
+
 	changed := false
-	for _, m := range messages {
-		msg, ok := m.(map[string]any)
-		if !ok {
-			continue
+
+	// 1. 规范化 model 字段 (剥离 cn/, cb/, en/, wb/ 等前缀)
+	if len(targetModel) > 0 && strings.TrimSpace(targetModel[0]) != "" {
+		clean := strings.TrimSpace(targetModel[0])
+		if obj["model"] != clean {
+			obj["model"] = clean
+			changed = true
 		}
-		if rewriteContentField(msg) {
+	} else if currentModel, ok := obj["model"].(string); ok {
+		clean := models.ParsePrefix(currentModel).CleanModel
+		if clean != currentModel {
+			obj["model"] = clean
 			changed = true
 		}
 	}
+
+	// 2. 规范化 messages 列表与 content 字段结构
+	if messages, ok := obj["messages"].([]any); ok {
+		for i, m := range messages {
+			msg, isMap := m.(map[string]any)
+			if !isMap {
+				continue
+			}
+
+			// 检查并规范化 content 字段为结构化数组格式 (上游要求结构化数据，不能为裸字符串)
+			switch c := msg["content"].(type) {
+			case string:
+				sanitized := SanitizeBlockedTemplates(c)
+				msg["content"] = []map[string]any{
+					{"type": "text", "text": sanitized},
+				}
+				changed = true
+			case []any:
+				// 若已为数组，遍历并替换敏感模板句
+				for _, p := range c {
+					if part, okPart := p.(map[string]any); okPart {
+						if t, okText := part["text"].(string); okText {
+							if r := SanitizeBlockedTemplates(t); r != t {
+								part["text"] = r
+								changed = true
+							}
+						}
+						if _, hasType := part["type"]; !hasType {
+							part["type"] = "text"
+							changed = true
+						}
+					}
+				}
+			case nil:
+				msg["content"] = []map[string]any{
+					{"type": "text", "text": ""},
+				}
+				changed = true
+			}
+			messages[i] = msg
+		}
+		obj["messages"] = messages
+	}
+
+	// 3. 对 hy3 系列模型注入最大深度思考
 	if ForceMaxThinking(obj) {
 		changed = true
 	}
+
+	// 4. 清理无效的空工具参数
+	if tools, ok := obj["tools"].([]any); ok && len(tools) == 0 {
+		delete(obj, "tools")
+		delete(obj, "tool_choice")
+		changed = true
+	}
+
 	if !changed {
 		return payload
 	}
@@ -40,32 +100,6 @@ func RewriteSystemForUpstream(payload []byte) []byte {
 		return payload
 	}
 	return out
-}
-
-func rewriteContentField(msg map[string]any) bool {
-	switch c := msg["content"].(type) {
-	case string:
-		if r := SanitizeBlockedTemplates(c); r != c {
-			msg["content"] = r
-			return true
-		}
-	case []any:
-		modified := false
-		for _, p := range c {
-			part, ok := p.(map[string]any)
-			if !ok {
-				continue
-			}
-			if t, ok := part["text"].(string); ok {
-				if r := SanitizeBlockedTemplates(t); r != t {
-					part["text"] = r
-					modified = true
-				}
-			}
-		}
-		return modified
-	}
-	return false
 }
 
 // SanitizeBlockedTemplates 替换被腾讯 CodeBuddy 拦截的固定模板句

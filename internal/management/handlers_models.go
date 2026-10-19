@@ -64,8 +64,13 @@ func HandleTestModel(c *gin.Context) {
 
 	testReq := map[string]any{
 		"model": parsed.CleanModel,
-		"messages": []map[string]string{
-			{"role": "user", "content": "ping"},
+		"messages": []map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]string{
+					{"type": "text", "text": "ping"},
+				},
+			},
 		},
 		"stream":     false,
 		"max_tokens": 16,

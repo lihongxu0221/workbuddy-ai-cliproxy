@@ -299,12 +299,27 @@ func (d *Dispatcher) handleModelsForAuth(reqBytes []byte) ([]byte, error) {
 
 	reg := models.GetRegistry()
 	var modelsForRealm []*models.ModelInfo
+	seen := make(map[string]bool)
+
+	// 优先取 usableModels (包含动态探测到的最新上游模型，如 deepseek-v4.1-flash)
+	for _, m := range reg.ListUsable(store.List()) {
+		if m.Disabled {
+			continue
+		}
+		if m.Realm == targetRealm && !seen[m.ID] {
+			modelsForRealm = append(modelsForRealm, m)
+			seen[m.ID] = true
+		}
+	}
+
+	// 补齐静态全局列表中属于该 Realm 的模型
 	for _, m := range reg.ListAll() {
 		if m.Disabled {
 			continue
 		}
-		if m.Realm == targetRealm {
+		if m.Realm == targetRealm && !seen[m.ID] {
 			modelsForRealm = append(modelsForRealm, m)
+			seen[m.ID] = true
 		}
 	}
 

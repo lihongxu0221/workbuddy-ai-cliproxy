@@ -110,7 +110,54 @@ func (r *Registry) loadDefaults() {
 		IsFree:           false,
 	})
 
+	// 国际区 DeepSeek 镜像模型
+	r.registerStatic(&ModelInfo{
+		ID:               "deepseek-v4.1-flash",
+		DisplayName:      "DeepSeek V4.1 Flash",
+		Vendor:           "DeepSeek",
+		Realm:            auth.RealmGlobal,
+		CreditMultiplier: 0.0,
+		ContextLength:    128000,
+		IsFree:           true,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "deepseek-v4-pro",
+		DisplayName:      "DeepSeek V4 Pro",
+		Vendor:           "DeepSeek",
+		Realm:            auth.RealmGlobal,
+		CreditMultiplier: 1.0,
+		ContextLength:    1000000,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "deepseek-v4",
+		DisplayName:      "DeepSeek V4",
+		Vendor:           "DeepSeek",
+		Realm:            auth.RealmGlobal,
+		CreditMultiplier: 0.8,
+		ContextLength:    128000,
+		IsFree:           false,
+	})
+	r.registerStatic(&ModelInfo{
+		ID:               "deepseek-v3",
+		DisplayName:      "DeepSeek V3",
+		Vendor:           "DeepSeek",
+		Realm:            auth.RealmGlobal,
+		CreditMultiplier: 0.5,
+		ContextLength:    64000,
+		IsFree:           false,
+	})
+
 	// 国内区/双区通用主流模型
+	r.registerStatic(&ModelInfo{
+		ID:               "deepseek-v4.1-flash",
+		DisplayName:      "DeepSeek V4.1 Flash (Free)",
+		Vendor:           "DeepSeek",
+		Realm:            auth.RealmCN,
+		CreditMultiplier: 0.0,
+		ContextLength:    128000,
+		IsFree:           true,
+	})
 	r.registerStatic(&ModelInfo{
 		ID:               "deepseek-v4",
 		DisplayName:      "DeepSeek V4",
@@ -271,6 +318,9 @@ func (r *Registry) SyncUsableModels(ctx context.Context, accounts []*auth.WorkBu
 		probedModels, err := fetcher.FetchModelsByAccount(ctx, acc)
 		if err == nil && len(probedModels) > 0 {
 			for _, m := range probedModels {
+				// 动态同步到全局模型表，确保 CPA 宿主能全量识别
+				r.models[m.ID] = m
+
 				if existing, ok := usable[m.ID]; ok {
 					if !containsString(existing.AvailableAccounts, accIdentifier) {
 						existing.AvailableAccounts = append(existing.AvailableAccounts, accIdentifier)

@@ -74,13 +74,28 @@ func TestRewriteSystemForUpstream(t *testing.T) {
 
 	messages := parsed["messages"].([]any)
 	sysMsg := messages[0].(map[string]any)
-	sysContent := sysMsg["content"].(string)
+	contentParts := sysMsg["content"].([]any)
+	part0 := contentParts[0].(map[string]any)
+	sysContent := part0["text"].(string)
 
 	if strings.Contains(sysContent, "CLI for Claude") {
 		t.Errorf("expected system message to be rewritten")
 	}
 	if !strings.Contains(sysContent, "CLI tool for Claude") {
 		t.Errorf("expected 'CLI tool' in rewritten content")
+	}
+
+	// 验证剥离 cn/ 前缀并将 string 转为结构化 content 数组
+	reqWithPrefix := `{"model":"cn/deepseek-v4-pro","messages":[{"role":"user","content":"hi"}]}`
+	rewrittenPrefix := RewriteSystemForUpstream([]byte(reqWithPrefix))
+	var parsedPrefix map[string]any
+	_ = json.Unmarshal(rewrittenPrefix, &parsedPrefix)
+	if parsedPrefix["model"] != "deepseek-v4-pro" {
+		t.Errorf("expected model = deepseek-v4-pro, got %v", parsedPrefix["model"])
+	}
+	userParts := parsedPrefix["messages"].([]any)[0].(map[string]any)["content"].([]any)
+	if userParts[0].(map[string]any)["text"] != "hi" {
+		t.Errorf("expected text = hi, got %v", userParts[0])
 	}
 }
 

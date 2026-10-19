@@ -56,7 +56,7 @@ func (e *WorkBuddyExecutor) Execute(ctx context.Context, a *auth.WorkBuddyAuth, 
 		acc = a
 	}
 
-	body := RewriteSystemForUpstream(ForceStreamBody(req.Payload, nil))
+	body := RewriteSystemForUpstream(ForceStreamBody(req.Payload, nil), req.Model)
 	apiURL := fmt.Sprintf("%s/v2/chat/completions", acc.BaseURL())
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(body))
@@ -100,7 +100,7 @@ func (e *WorkBuddyExecutor) ExecuteStream(ctx context.Context, a *auth.WorkBuddy
 		acc = a
 	}
 
-	body := RewriteSystemForUpstream(ForceStreamBody(req.Payload, nil))
+	body := RewriteSystemForUpstream(ForceStreamBody(req.Payload, nil), req.Model)
 	apiURL := fmt.Sprintf("%s/v2/chat/completions", acc.BaseURL())
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(body))
