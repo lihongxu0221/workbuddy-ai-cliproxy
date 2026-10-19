@@ -156,6 +156,7 @@ func cliproxy_plugin_init(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_a
 	dataDir := config.GetDataDir()
 	log.Printf("[workbuddy] auth dir: %s", authDir)
 	log.Printf("[workbuddy] data dir: %s", dataDir)
+	log.Printf("[workbuddy] proxy url: %s", config.GetProxyURL())
 
 	// 初始化本地凭据仓库 (绑定持久卷绝对路径)
 	store := auth.GetStore()
@@ -259,6 +260,7 @@ func InitPlugin(ctxPtr unsafe.Pointer) unsafe.Pointer {
 	dataDir := config.GetDataDir()
 	log.Printf("[workbuddy] auth dir: %s", authDir)
 	log.Printf("[workbuddy] data dir: %s", dataDir)
+	log.Printf("[workbuddy] proxy url: %s", config.GetProxyURL())
 
 	store := auth.GetStore()
 	_ = store.Init(authDir)

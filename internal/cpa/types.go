@@ -207,10 +207,10 @@ type ExecutorRequest struct {
 	Metadata        map[string]any  `json:"metadata,omitempty"`
 }
 
-// ExecutorResponse 执行器响应
+// ExecutorResponse 执行器响应 (Payload 必须为 []byte，序列化为 Base64 字符串以匹配 CPA 宿主 []uint8 字段)
 type ExecutorResponse struct {
-	Headers http.Header     `json:"headers,omitempty"`
-	Payload json.RawMessage `json:"payload"`
+	Headers http.Header `json:"headers,omitempty"`
+	Payload []byte      `json:"payload"`
 }
 
 // ExecutorStreamRequest 流式请求
@@ -220,9 +220,9 @@ type ExecutorStreamRequest struct {
 	HostCallbackID string `json:"host_callback_id,omitempty"`
 }
 
-// ExecutorStreamChunk 流式响应单块
+// ExecutorStreamChunk 流式响应单块 (Payload 必须为 []byte)
 type ExecutorStreamChunk struct {
-	Payload json.RawMessage `json:"payload"`
+	Payload []byte `json:"payload"`
 }
 
 // StreamResponse 同步流式响应包装

@@ -91,6 +91,12 @@ func detectCPAHostContext() cpaHostContext {
 		"config.yaml",
 		filepath.Join("..", "config.yaml"),
 		filepath.Join("..", "..", "config.yaml"),
+		"/root/config.yaml",
+		"/root/.cli-proxy-api/config.yaml",
+		"/app/config.yaml",
+	}
+	if exe, err := os.Executable(); err == nil {
+		candidateFiles = append(candidateFiles, filepath.Join(filepath.Dir(exe), "config.yaml"))
 	}
 	if envConfig := os.Getenv("CPA_CONFIG_FILE"); envConfig != "" {
 		candidateFiles = append([]string{envConfig}, candidateFiles...)
