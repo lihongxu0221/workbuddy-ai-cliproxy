@@ -2,6 +2,8 @@ package executor
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"strings"
@@ -9,15 +11,56 @@ import (
 	"workbuddy-ai-cliproxy/internal/models"
 )
 
+// UnpackPayload 彻底解包可能被多层 JSON/Base64 包装的载荷，确保还原为标准的 JSON Object 字节切片
+func UnpackPayload(raw []byte) []byte {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 {
+		return raw
+	}
+
+	// 1. 如果已被双重序列化为 JSON 字符串 (以引号包裹)，解开一层转义
+	if len(trimmed) >= 2 && trimmed[0] == '"' && trimmed[len(trimmed)-1] == '"' {
+		var s string
+		if err := json.Unmarshal(trimmed, &s); err == nil {
+			unquoted := []byte(s)
+			t := bytes.TrimSpace(unquoted)
+			if len(t) > 0 && (t[0] == '{' || t[0] == '[') {
+				return UnpackPayload(t) // 递归解包可能存在的多层嵌套
+			}
+			// 检查内部是否为 Base64
+			if decoded, errB64 := base64.StdEncoding.DecodeString(s); errB64 == nil {
+				tB64 := bytes.TrimSpace(decoded)
+				if len(tB64) > 0 && (tB64[0] == '{' || tB64[0] == '[') {
+					return UnpackPayload(tB64)
+				}
+			}
+			return unquoted
+		}
+	}
+
+	// 2. 如果是未带引号的 Base64 编码字符串
+	if len(trimmed) > 0 && trimmed[0] != '{' && trimmed[0] != '[' {
+		if decoded, errB64 := base64.StdEncoding.DecodeString(string(trimmed)); errB64 == nil {
+			tB64 := bytes.TrimSpace(decoded)
+			if len(tB64) > 0 && (tB64[0] == '{' || tB64[0] == '[') {
+				return UnpackPayload(tB64)
+			}
+		}
+	}
+
+	return trimmed
+}
+
 // RewriteSystemForUpstream 敏感词与思考模型策略重写，并对国内版与全区请求体执行结构化规范化
 // 解决 11101 Unmarshal chat params failed 错误：确保 messages 中的 content 字段为结构化数据 [{"type":"text","text":"..."}]，并去除模型路由前缀
 func RewriteSystemForUpstream(payload []byte, targetModel ...string) []byte {
-	if len(payload) == 0 {
+	unpacked := UnpackPayload(payload)
+	if len(unpacked) == 0 {
 		return payload
 	}
 	var obj map[string]any
-	if json.Unmarshal(payload, &obj) != nil {
-		return payload
+	if json.Unmarshal(unpacked, &obj) != nil {
+		return unpacked
 	}
 
 	changed := false
@@ -92,12 +135,12 @@ func RewriteSystemForUpstream(payload []byte, targetModel ...string) []byte {
 		changed = true
 	}
 
-	if !changed {
+	if !changed && bytes.Equal(unpacked, payload) {
 		return payload
 	}
 	out, err := json.Marshal(obj)
 	if err != nil {
-		return payload
+		return unpacked
 	}
 	return out
 }
@@ -126,11 +169,11 @@ func ForceMaxThinking(obj map[string]any) bool {
 	return true
 }
 
-// ForceStreamBody 确保请求体中的 stream=true
+// ForceStreamBody 确保请求体中的 stream=true 并解除外层 JSON 字符串包裹
 func ForceStreamBody(payload, original []byte) []byte {
-	src := payload
+	src := UnpackPayload(payload)
 	if len(src) == 0 {
-		src = original
+		src = UnpackPayload(original)
 	}
 	var obj map[string]any
 	if json.Unmarshal(src, &obj) != nil {

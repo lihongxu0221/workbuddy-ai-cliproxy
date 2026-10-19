@@ -200,29 +200,17 @@ func (f *DynamicFetcher) FetchModelsByAccount(ctx context.Context, acc *auth.Wor
 	}
 
 	modelsRaw := envelope.Models
-	agentsRaw := envelope.Agents
 
 	// 腾讯网关信封格式 {code:0, data:{models, agents}}
 	if len(modelsRaw) == 0 && len(envelope.Data) > 0 {
 		var inner upstreamConfigResp
 		if err := json.Unmarshal(envelope.Data, &inner); err == nil {
 			modelsRaw = inner.Models
-			agentsRaw = inner.Agents
 		}
 	}
 
 	if len(modelsRaw) == 0 {
 		return nil, fmt.Errorf("upstream returned empty model catalog")
-	}
-
-	// 客户端逻辑：若 agents 中存在 name=cli 的白名单，则只保留白名单内模型
-	cliWhitelist := map[string]bool{}
-	for _, ag := range agentsRaw {
-		if strings.EqualFold(ag.Name, "cli") && len(ag.Models) > 0 {
-			for _, id := range ag.Models {
-				cliWhitelist[strings.TrimSpace(id)] = true
-			}
-		}
 	}
 
 	var result []*ModelInfo
@@ -236,11 +224,8 @@ func (f *DynamicFetcher) FetchModelsByAccount(ctx context.Context, acc *auth.Wor
 		if id == "" {
 			continue
 		}
-		// 白名单非空时严格过滤
-		if len(cliWhitelist) > 0 && !cliWhitelist[id] {
-			continue
-		}
-		// 已被官方下架/禁用的模型跳过
+
+		// 仅跳过已被官方显式标记禁用的模型，保留上游下发的所有可用模型 (含 DeepSeek、Claude、GPT 等全量目录)
 		if flexBool(item.Disabled) || flexBool(item.DisabledSnakeName) {
 			continue
 		}

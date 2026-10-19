@@ -700,9 +700,9 @@ func (d *Dispatcher) handleExecutorExecute(ctx context.Context, raw []byte) ([]b
 		}
 	}
 
-	payload := req.Payload
+	payload := executor.UnpackPayload(req.Payload)
 	if len(payload) == 0 {
-		payload = req.OriginalRequest
+		payload = executor.UnpackPayload(req.OriginalRequest)
 	}
 
 	start := time.Now()
@@ -744,9 +744,9 @@ func (d *Dispatcher) handleExecutorExecuteStream(ctx context.Context, raw []byte
 		}
 	}
 
-	payload := req.Payload
+	payload := executor.UnpackPayload(req.Payload)
 	if len(payload) == 0 {
-		payload = req.OriginalRequest
+		payload = executor.UnpackPayload(req.OriginalRequest)
 	}
 
 	streamHeaders := http.Header{

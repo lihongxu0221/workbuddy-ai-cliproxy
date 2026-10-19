@@ -331,6 +331,19 @@ func (r *Registry) SyncUsableModels(ctx context.Context, accounts []*auth.WorkBu
 					usable[m.ID] = &mCopy
 				}
 			}
+
+			// 补充该 Realm 已预置的核心模型 (确保如国际区 DeepSeek 镜像模型挂载完整)
+			for _, def := range r.models {
+				if def.Realm == acc.Realm {
+					if _, ok := usable[def.ID]; !ok {
+						mCopy := *def
+						mCopy.AvailableAccounts = []string{accIdentifier}
+						usable[def.ID] = &mCopy
+					} else if !containsString(usable[def.ID].AvailableAccounts, accIdentifier) {
+						usable[def.ID].AvailableAccounts = append(usable[def.ID].AvailableAccounts, accIdentifier)
+					}
+				}
+			}
 			continue
 		}
 

@@ -125,3 +125,36 @@ func TestCleanChunkJSON(t *testing.T) {
 		t.Errorf("expected content to be preserved: %s", cleaned)
 	}
 }
+
+func TestUnpackPayload(t *testing.T) {
+	// 1. 原始 JSON Object
+	rawObj := []byte(`{"model":"deepseek-v4-pro","stream":false}`)
+	unpacked1 := UnpackPayload(rawObj)
+	if string(unpacked1) != string(rawObj) {
+		t.Errorf("expected raw obj preserved, got %s", string(unpacked1))
+	}
+
+	// 2. 双重序列化为 JSON 字符串 (以引号包裹) -> 解开后必须为真实对象
+	doubleEncoded := []byte(`"{\"model\":\"deepseek-v4-pro\",\"stream\":false}"`)
+	unpacked2 := UnpackPayload(doubleEncoded)
+	if unpacked2[0] != '{' || !strings.Contains(string(unpacked2), `"model":"deepseek-v4-pro"`) {
+		t.Errorf("failed to unpack double-encoded JSON string: %s", string(unpacked2))
+	}
+
+	// 验证 ForceStreamBody 和 RewriteSystemForUpstream 能够正常处理双重序列化字符串并输出标准对象
+	forced := ForceStreamBody(doubleEncoded, nil)
+	if forced[0] != '{' {
+		t.Errorf("ForceStreamBody did not unpack string to JSON object: %s", string(forced))
+	}
+	rewritten := RewriteSystemForUpstream(doubleEncoded, "deepseek-v4-pro")
+	if rewritten[0] != '{' {
+		t.Errorf("RewriteSystemForUpstream did not unpack string to JSON object: %s", string(rewritten))
+	}
+
+	// 3. Base64 编码字符串
+	b64String := []byte(`"eyJtb2RlbCI6ImRlZXBzZWVrLXY0LXBybyIsInN0cmVhbSI6ZmFsc2V9"`)
+	unpacked3 := UnpackPayload(b64String)
+	if unpacked3[0] != '{' {
+		t.Errorf("failed to unpack base64 payload: %s", string(unpacked3))
+	}
+}
