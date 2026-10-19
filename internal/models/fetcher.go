@@ -115,11 +115,15 @@ type upstreamModelItem struct {
 	IsDefault       any    `json:"isDefault"`
 	Disabled        any    `json:"disabled"`
 	DisabledReason  string `json:"disabledReason"`
+	SupportsImages  any    `json:"supportsImages"`
+	SupportsReasoning any  `json:"supportsReasoning"`
 	// 兼容 snake_case 变体
 	IDAlt             any `json:"model_id"`
 	CreditsAlt        any `json:"credit_multiplier"`
 	ContextWindowAlt  any `json:"context_length"`
 	DisabledSnakeName any `json:"is_disabled"`
+	SupportsImagesAlt any `json:"supports_images"`
+	SupportsReasonAlt any `json:"supports_reasoning"`
 }
 
 type upstreamConfigResp struct {
@@ -247,14 +251,24 @@ func (f *DynamicFetcher) FetchModelsByAccount(ctx context.Context, acc *auth.Wor
 			displayName = id
 		}
 
+		desc := strings.TrimSpace(item.Description)
+		hasImages := flexBool(item.SupportsImages) || flexBool(item.SupportsImagesAlt) || strings.Contains(id, "5v") || strings.Contains(id, "vision") || strings.Contains(id, "flash")
+		hasReasoning := flexBool(item.SupportsReasoning) || flexBool(item.SupportsReasonAlt) || strings.Contains(id, "hy3") || strings.Contains(id, "fable") || strings.Contains(id, "pro")
+
 		result = append(result, &ModelInfo{
-			ID:               id,
-			DisplayName:      displayName,
-			Vendor:           deriveVendor(id),
-			Realm:            acc.Realm,
-			CreditMultiplier: credits,
-			ContextLength:    int(contextLen),
-			IsFree:           credits == 0,
+			ID:                id,
+			DisplayName:       displayName,
+			Vendor:            deriveVendor(id),
+			Description:       desc,
+			Realm:             acc.Realm,
+			CreditMultiplier:  credits,
+			ContextLength:     int(contextLen),
+			MaxInputTokens:    int(flexNum(item.MaxInputTokens)),
+			MaxOutputTokens:   int(flexNum(item.MaxOutputTokens)),
+			IsFree:            credits == 0,
+			SupportsImages:    hasImages,
+			SupportsTools:     true,
+			SupportsReasoning: hasReasoning,
 		})
 	}
 

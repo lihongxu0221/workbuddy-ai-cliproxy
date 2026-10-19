@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"workbuddy-ai-cliproxy/internal/auth"
 )
@@ -31,7 +32,7 @@ func TestSyncUsableModelsFiltersByActiveAccounts(t *testing.T) {
 		if m.Realm != auth.RealmCN {
 			t.Errorf("expected only CN models when only CN account exists, but found: %s (%s)", m.ID, m.Realm)
 		}
-		if len(m.AvailableAccounts) == 0 || m.AvailableAccounts[0] != "国内测试号" {
+		if len(m.AvailableAccounts) == 0 || !strings.Contains(m.AvailableAccounts[0], "国内测试号") {
 			t.Errorf("expected AvailableAccounts to contain '国内测试号', got %v", m.AvailableAccounts)
 		}
 	}
@@ -52,7 +53,7 @@ func TestSyncUsableModelsFiltersByActiveAccounts(t *testing.T) {
 		if m.Realm != auth.RealmGlobal {
 			t.Errorf("expected only Global models when only Global account exists, but found: %s (%s)", m.ID, m.Realm)
 		}
-		if len(m.AvailableAccounts) == 0 || m.AvailableAccounts[0] != "海外主力号" {
+		if len(m.AvailableAccounts) == 0 || !strings.Contains(m.AvailableAccounts[0], "海外主力号") {
 			t.Errorf("expected AvailableAccounts to contain '海外主力号', got %v", m.AvailableAccounts)
 		}
 	}

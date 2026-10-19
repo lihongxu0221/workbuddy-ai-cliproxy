@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"workbuddy-ai-cliproxy/internal/auth"
 )
@@ -11,12 +12,19 @@ type ModelInfo struct {
 	ID                string     `json:"id"`
 	DisplayName       string     `json:"displayName"`
 	Vendor            string     `json:"vendor"`
+	Description       string     `json:"description,omitempty"`
 	Realm             auth.Realm `json:"realm"`
 	CreditMultiplier  float64    `json:"creditMultiplier"`
 	ContextLength     int        `json:"contextLength"`
+	MaxInputTokens    int        `json:"maxInputTokens,omitempty"`
+	MaxOutputTokens   int        `json:"maxOutputTokens,omitempty"`
 	IsFree            bool       `json:"isFree"`
 	Disabled          bool       `json:"disabled"`
+	SupportsImages    bool       `json:"supportsImages"`
+	SupportsTools     bool       `json:"supportsTools"`
+	SupportsReasoning bool       `json:"supportsReasoning"`
 	AvailableAccounts []string   `json:"availableAccounts,omitempty"`
+	AvailableRealms   []string   `json:"availableRealms,omitempty"`
 }
 
 // Registry 模型注册表与动态可用探测管理器
@@ -313,6 +321,11 @@ func (r *Registry) SyncUsableModels(ctx context.Context, accounts []*auth.WorkBu
 		if accIdentifier == "" {
 			accIdentifier = acc.ID
 		}
+		realmLabel := "WorkBuddy"
+		if acc.Realm == auth.RealmGlobal {
+			realmLabel = "WorkBuddy AI"
+		}
+		providerBadge := fmt.Sprintf("%s (%s)", accIdentifier, realmLabel)
 
 		// 1. 尝试从上游动态接口抓取该账号实际可见的模型列表
 		probedModels, err := fetcher.FetchModelsByAccount(ctx, acc)
@@ -322,25 +335,35 @@ func (r *Registry) SyncUsableModels(ctx context.Context, accounts []*auth.WorkBu
 				r.models[m.ID] = m
 
 				if existing, ok := usable[m.ID]; ok {
-					if !containsString(existing.AvailableAccounts, accIdentifier) {
-						existing.AvailableAccounts = append(existing.AvailableAccounts, accIdentifier)
+					if !containsString(existing.AvailableAccounts, providerBadge) {
+						existing.AvailableAccounts = append(existing.AvailableAccounts, providerBadge)
+					}
+					if !containsString(existing.AvailableRealms, string(acc.Realm)) {
+						existing.AvailableRealms = append(existing.AvailableRealms, string(acc.Realm))
 					}
 				} else {
 					mCopy := *m
-					mCopy.AvailableAccounts = []string{accIdentifier}
+					mCopy.AvailableAccounts = []string{providerBadge}
+					mCopy.AvailableRealms = []string{string(acc.Realm)}
 					usable[m.ID] = &mCopy
 				}
 			}
 
-			// 补充该 Realm 已预置的核心模型 (确保如国际区 DeepSeek 镜像模型挂载完整)
+			// 补充该 Realm 已预置的核心模型 (确保如双区通用的 DeepSeek 等模型挂载完整)
 			for _, def := range r.models {
 				if def.Realm == acc.Realm {
-					if _, ok := usable[def.ID]; !ok {
+					if existing, ok := usable[def.ID]; ok {
+						if !containsString(existing.AvailableAccounts, providerBadge) {
+							existing.AvailableAccounts = append(existing.AvailableAccounts, providerBadge)
+						}
+						if !containsString(existing.AvailableRealms, string(acc.Realm)) {
+							existing.AvailableRealms = append(existing.AvailableRealms, string(acc.Realm))
+						}
+					} else {
 						mCopy := *def
-						mCopy.AvailableAccounts = []string{accIdentifier}
+						mCopy.AvailableAccounts = []string{providerBadge}
+						mCopy.AvailableRealms = []string{string(acc.Realm)}
 						usable[def.ID] = &mCopy
-					} else if !containsString(usable[def.ID].AvailableAccounts, accIdentifier) {
-						usable[def.ID].AvailableAccounts = append(usable[def.ID].AvailableAccounts, accIdentifier)
 					}
 				}
 			}
@@ -351,12 +374,16 @@ func (r *Registry) SyncUsableModels(ctx context.Context, accounts []*auth.WorkBu
 		for _, m := range r.models {
 			if m.Realm == acc.Realm {
 				if existing, ok := usable[m.ID]; ok {
-					if !containsString(existing.AvailableAccounts, accIdentifier) {
-						existing.AvailableAccounts = append(existing.AvailableAccounts, accIdentifier)
+					if !containsString(existing.AvailableAccounts, providerBadge) {
+						existing.AvailableAccounts = append(existing.AvailableAccounts, providerBadge)
+					}
+					if !containsString(existing.AvailableRealms, string(acc.Realm)) {
+						existing.AvailableRealms = append(existing.AvailableRealms, string(acc.Realm))
 					}
 				} else {
 					mCopy := *m
-					mCopy.AvailableAccounts = []string{accIdentifier}
+					mCopy.AvailableAccounts = []string{providerBadge}
+					mCopy.AvailableRealms = []string{string(acc.Realm)}
 					usable[m.ID] = &mCopy
 				}
 			}

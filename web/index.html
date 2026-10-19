@@ -25,6 +25,39 @@
       </div>
     </header>
 
+    <!-- 双区出口看板 (参考 Qoder2API-Hub 图2) -->
+    <div class="realm-cards-grid">
+      <div class="realm-card" id="realm-card-global">
+        <div class="realm-header">
+          <span class="badge-global-pill" data-i18n="realm_global_title">国际版 (Global)</span>
+        </div>
+        <div class="realm-host">workbuddy.ai · codebuddy.ai</div>
+        <div class="realm-footer">
+          <span class="realm-stat"><b id="stat-global-credits">0.00</b> 剩余积分 · <b id="stat-global-accs">0</b> 账号</span>
+          <span class="badge badge-slot" id="stat-global-status">在线就绪</span>
+        </div>
+      </div>
+      <div class="realm-card active-realm" id="realm-card-cn">
+        <div class="realm-header">
+          <span class="badge-cn-pill" data-i18n="realm_cn_title">国内版 (China)</span>
+          <span class="badge-default-exit">默认出口</span>
+          <span class="badge-current-view">当前视图</span>
+        </div>
+        <div class="realm-host">copilot.tencent.com · workbuddy.cn</div>
+        <div class="realm-footer">
+          <span class="realm-stat" style="color:#10b981"><b id="stat-cn-credits">0.00</b> 剩余积分 · <b id="stat-cn-accs">0</b> 账号</span>
+          <span class="badge badge-slot" id="stat-cn-status">在线就绪</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 后台定时调度器提示条 (参考 Qoder2API-Hub) -->
+    <div class="scheduler-bar">
+      <span class="dot-running"></span>
+      <strong data-i18n="scheduler_status_title">后台定时调度器: 运行中 · 整点排程 (09:00/21:00 每日签到 · 22:00 Token 保活)</strong>
+      <span class="scheduler-time" id="scheduler-time-text">上次: 刚刚 · 下次: 今日 21:00</span>
+    </div>
+
     <!-- 聚合指标总览 -->
     <div class="metrics-grid">
       <div class="metric-card">
@@ -76,30 +109,29 @@
       </div>
     </div>
 
-    <!-- Tab 2: 模型目录与探测 -->
+    <!-- Tab 2: 模型目录与探测 (参考 Qoder2API-Hub 图1模式) -->
     <div class="tab-pane" id="tab-models" style="display:none">
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <p style="color:var(--text-muted);font-size:13px" data-i18n="models_tip">已遍历当前账号池，展示各账号实际授权与可见的模型清单：</p>
-          <button id="btn-refresh-models" class="btn-secondary btn-sm" data-i18n="btn_probe_models">🔄 重新探测可用模型</button>
+        <div class="models-toolbar">
+          <div class="toolbar-left">
+            <span class="toolbar-title" data-i18n="models_catalog_title">聚合模型目录</span>
+            <span class="toolbar-count" id="availModelCount">(共 0 个 · 1:N 账号供给)</span>
+          </div>
+          <div class="toolbar-right">
+            <input type="text" id="model-search-input" placeholder="搜索模型 ID、显示名、厂商..." class="search-input">
+            <div class="filter-pills" id="model-filter-pills">
+              <button class="filter-pill active" data-filter="all">全部</button>
+              <button class="filter-pill" data-filter="free">免费</button>
+              <button class="filter-pill" data-filter="vision">视觉</button>
+              <button class="filter-pill" data-filter="tools">工具</button>
+              <button class="filter-pill" data-filter="reasoning">推理</button>
+            </div>
+            <button id="btn-refresh-models" class="btn-secondary btn-sm" data-i18n="btn_probe_models">🔄 重新探测可用模型</button>
+          </div>
         </div>
-        <div class="table-wrapper">
-          <table>
-            <thead>
-              <tr>
-                <th data-i18n="th_model_id">模型标识 (Model ID)</th>
-                <th data-i18n="th_model_name">显示名称</th>
-                <th data-i18n="th_model_realm">所属区域</th>
-                <th data-i18n="th_model_source">可用账号来源</th>
-                <th data-i18n="th_model_vendor">厂商</th>
-                <th data-i18n="th_model_rate">费率倍率</th>
-                <th data-i18n="th_model_actions">操作</th>
-              </tr>
-            </thead>
-            <tbody id="models-tbody">
-              <!-- 动态插入 -->
-            </tbody>
-          </table>
+
+        <div id="models-container" class="models-list-container">
+          <!-- 动态按图1模式插入模型卡片行 -->
         </div>
       </div>
     </div>

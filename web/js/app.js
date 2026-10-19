@@ -63,6 +63,11 @@ const I18N = {
     btn_refresh: "Refresh",
     btn_delete: "Delete",
     btn_test: "Test Ping",
+    realm_global_title: "国际版 (Global)",
+    realm_cn_title: "国内版 (China)",
+    scheduler_status_title: "后台定时调度器: 运行中 · 整点排程 (09:00/21:00 每日签到 · 22:00 Token 保活)",
+    models_catalog_title: "聚合模型目录",
+    alert_copy_ok: "已复制模型 ID: ",
     msg_loading_accounts: "正在加载账号池...",
     msg_no_accounts: "当前未发现账号凭证，请点击「扫码 / OAuth 登录」或「导入 Token」添加。",
     msg_probing_models: "正在遍历当前账号并探测可用模型...",
@@ -131,6 +136,11 @@ const I18N = {
     btn_refresh: "Refresh",
     btn_delete: "Delete",
     btn_test: "Test Ping",
+    realm_global_title: "Global Realm",
+    realm_cn_title: "China Realm",
+    scheduler_status_title: "Scheduler: Running · Scheduled Tasks (09:00/21:00 Daily Claim · 22:00 Token Keepalive)",
+    models_catalog_title: "Aggregated Models",
+    alert_copy_ok: "Copied model ID: ",
     msg_loading_accounts: "Loading account pool...",
     msg_no_accounts: "No accounts found. Click 'Scan / OAuth Login' or 'Import Token' to add.",
     msg_probing_models: "Iterating through active accounts and probing usable models...",
@@ -319,6 +329,24 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const modelSearchInput = document.getElementById("model-search-input");
+  if (modelSearchInput) {
+    modelSearchInput.addEventListener("input", (e) => {
+      modelSearchQuery = e.target.value.trim();
+      renderModelsCards();
+    });
+  }
+
+  const filterPills = document.querySelectorAll("#model-filter-pills .filter-pill");
+  filterPills.forEach(pill => {
+    pill.addEventListener("click", () => {
+      filterPills.forEach(p => p.classList.remove("active"));
+      pill.classList.add("active");
+      currentModelFilter = pill.getAttribute("data-filter") || "all";
+      renderModelsCards();
+    });
+  });
+
   document.getElementById("btn-set-key").addEventListener("click", () => {
     const current = getManagementKey();
     const entered = prompt(
@@ -457,46 +485,209 @@ async function loadAccounts() {
         `;
         tbody.appendChild(tr);
       });
+
+      // 同步更新顶部双区出口看板数据 (对齐 Qoder2API-Hub 图2)
+      let globalCredits = 0, globalCount = 0;
+      let cnCredits = 0, cnCount = 0;
+      json.data.forEach(acc => {
+        if (acc.realm === 'global') {
+          globalCredits += (acc.credits || 0);
+          globalCount++;
+        } else {
+          cnCredits += (acc.credits || 0);
+          cnCount++;
+        }
+      });
+      const elGC = document.getElementById("stat-global-credits");
+      if (elGC) elGC.innerText = globalCredits.toFixed(2);
+      const elGA = document.getElementById("stat-global-accs");
+      if (elGA) elGA.innerText = globalCount;
+      const elCC = document.getElementById("stat-cn-credits");
+      if (elCC) elCC.innerText = cnCredits.toFixed(2);
+      const elCA = document.getElementById("stat-cn-accs");
+      if (elCA) elCA.innerText = cnCount;
     }
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger)">Error: ${e.message}</td></tr>`;
   }
 }
 
+let allModelsData = [];
+let currentModelFilter = "all";
+let modelSearchQuery = "";
+
+function fmtK(v) {
+  if (!v) return "-";
+  const num = Number(v);
+  if (num >= 1000000) return (num / 1000000).toFixed(num % 1000000 === 0 ? 0 : 1) + "M";
+  if (num >= 1000) return Math.round(num / 1000) + "K";
+  return num;
+}
+
+function copyText(text) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => {
+      alert((t("alert_copy_ok") || "已复制模型 ID: ") + text);
+    }).catch(() => {
+      prompt("复制模型 ID:", text);
+    });
+  } else {
+    prompt("复制模型 ID:", text);
+  }
+}
+
 async function loadModels() {
-  const tbody = document.getElementById("models-tbody");
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${t("msg_probing_models")}</td></tr>`;
+  const container = document.getElementById("models-container");
+  if (!container) return;
+  container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted)">${t("msg_probing_models")}</div>`;
 
   try {
     const res = await apiFetch(`${API_BASE}/models`);
     const json = await res.json();
     if (json.code === 0 && json.data) {
-      if (json.data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted)">${t("msg_no_models")}</td></tr>`;
-        return;
-      }
-      tbody.innerHTML = "";
-      json.data.forEach(m => {
-        const tr = document.createElement("tr");
-        const accs = m.availableAccounts && m.availableAccounts.length > 0
-          ? m.availableAccounts.map(a => `<span class="badge badge-slot">${a}</span>`).join(" ")
-          : `<span class="badge badge-slot">${m.realm}</span>`;
-
-        tr.innerHTML = `
-          <td><code>${m.id}</code></td>
-          <td>${m.displayName}</td>
-          <td><span class="badge ${m.realm === 'global' ? 'badge-global' : 'badge-cn'}">${m.realm === 'global' ? 'WorkBuddy AI' : 'WorkBuddy'}</span></td>
-          <td>${accs}</td>
-          <td>${m.vendor}</td>
-          <td>x${(m.creditMultiplier || 1.0).toFixed(2)}</td>
-          <td><button class="btn-secondary btn-sm" onclick="testModel('${m.id}')">${t("btn_test")}</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
+      allModelsData = json.data;
+      renderModelsCards();
+    } else {
+      container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">${json.error || json.message}</div>`;
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--danger)">Error: ${e.message}</td></tr>`;
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger)">Error: ${e.message}</div>`;
   }
+}
+
+function renderModelsCards() {
+  const container = document.getElementById("models-container");
+  if (!container) return;
+
+  let filtered = allModelsData.slice();
+
+  // 1. 类别过滤
+  if (currentModelFilter === "free") {
+    filtered = filtered.filter(m => m.isFree || m.creditMultiplier === 0);
+  } else if (currentModelFilter === "vision") {
+    filtered = filtered.filter(m => m.supportsImages || (m.id && (m.id.includes("5v") || m.id.includes("vision"))));
+  } else if (currentModelFilter === "tools") {
+    filtered = filtered.filter(m => m.supportsTools !== false);
+  } else if (currentModelFilter === "reasoning") {
+    filtered = filtered.filter(m => m.supportsReasoning || (m.id && (m.id.includes("hy3") || m.id.includes("fable") || m.id.includes("pro"))));
+  }
+
+  // 2. 关键词搜索
+  if (modelSearchQuery) {
+    const q = modelSearchQuery.toLowerCase();
+    filtered = filtered.filter(m =>
+      (m.id && m.id.toLowerCase().includes(q)) ||
+      (m.displayName && m.displayName.toLowerCase().includes(q)) ||
+      (m.vendor && m.vendor.toLowerCase().includes(q)) ||
+      (m.description && m.description.toLowerCase().includes(q))
+    );
+  }
+
+  const countElem = document.getElementById("availModelCount");
+  if (countElem) {
+    countElem.textContent = `(共 ${allModelsData.length} 个 · 当前显示 ${filtered.length} 个 · 1:N 账号供给)`;
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-muted)">${t("msg_no_models")}</div>`;
+    return;
+  }
+
+  container.innerHTML = "";
+
+  filtered.forEach(m => {
+    const row = document.createElement("div");
+    row.className = "model-card-row";
+
+    // 1:N 供给账号芯片 (对齐用户指令：模型不再按账号区分，但是可以标记模型由哪些账号提供 1:N)
+    const accs = (m.availableAccounts && m.availableAccounts.length > 0)
+      ? m.availableAccounts
+      : [m.realm === "global" ? "WorkBuddy AI 官方" : "WorkBuddy 官方"];
+
+    const accountChipsHTML = accs.map(accStr => {
+      const isGlobal = accStr.includes("WorkBuddy AI") || accStr.includes("global");
+      return `<span class="account-chip ${isGlobal ? 'account-chip-global' : 'account-chip-cn'}"><span class="dot">●</span> ${accStr}</span>`;
+    }).join(" ");
+
+    // 费率倍率胶囊 (严格还原图1 峰 0.50x → 谷 0.10x 样式)
+    let rateHTML = "";
+    if (m.isFree || m.creditMultiplier === 0) {
+      rateHTML = `<span class="pill-rate pill-free">限时免费 0.00x</span>`;
+    } else {
+      rateHTML = `<span class="pill-rate">峰 ${(m.creditMultiplier || 1.0).toFixed(2)}x → 谷 ${(m.creditMultiplier * 0.2).toFixed(2)}x</span>`;
+    }
+
+    // 能力徽标 (视觉, 工具, 推理, NEW - 严格对齐图1样式)
+    const capsHTML = [];
+    const hasVision = m.supportsImages || (m.id && (m.id.includes("5v") || m.id.includes("vision")));
+    if (hasVision) {
+      capsHTML.push(`<span class="pill-cap pill-vision">视觉</span>`);
+    }
+    if (m.supportsTools !== false) {
+      capsHTML.push(`<span class="pill-cap pill-tools">工具</span>`);
+    }
+    const hasReasoning = m.supportsReasoning || (m.id && (m.id.includes("hy3") || m.id.includes("fable") || m.id.includes("pro")));
+    if (hasReasoning) {
+      capsHTML.push(`<span class="pill-cap pill-reasoning">推理</span>`);
+    }
+    if (m.id && (m.id.includes("4.1") || m.id.includes("5.3") || m.id.includes("sol") || m.id.includes("astra"))) {
+      capsHTML.push(`<span class="pill-cap pill-new">NEW</span>`);
+    }
+
+    // 上下文规格 (如 1M / 200K / 400K - 对齐图1右侧展示)
+    const ctxLen = m.contextLength ? fmtK(m.contextLength) : "128K";
+    const maxIn = m.maxInputTokens ? fmtK(m.maxInputTokens) : ctxLen;
+    const maxOut = m.maxOutputTokens ? fmtK(m.maxOutputTokens) : "8K";
+    const specsText = (m.maxInputTokens && m.maxInputTokens !== m.contextLength)
+      ? `${ctxLen} / <b>${maxIn}</b> / ${maxOut}`
+      : `${ctxLen} / <b>${maxOut}</b>`;
+
+    // 区域与厂商标签
+    let realmTag = "";
+    if (m.availableRealms && m.availableRealms.length >= 2) {
+      realmTag = `<span class="badge" style="background:rgba(139,92,246,0.18);color:#c084fc;border:1px solid rgba(139,92,246,0.4)">双区全支持</span>`;
+    } else if (m.realm === "global" || (m.availableRealms && m.availableRealms.includes("global"))) {
+      realmTag = `<span class="badge badge-global">仅国际版 (WorkBuddy AI)</span>`;
+    } else {
+      realmTag = `<span class="badge badge-cn">仅国内版 (WorkBuddy)</span>`;
+    }
+
+    const descText = m.description || `${m.vendor || 'WorkBuddy'} 旗舰级大语言模型，具备顶尖智能体执行能力，支持复杂代码逻辑与多轮推理任务。`;
+
+    row.innerHTML = `
+      <div class="model-info-col">
+        <div class="model-name-line">
+          <span class="model-title">${m.displayName || m.id}</span>
+          ${realmTag}
+          <span class="badge badge-slot" style="font-size:11px">${m.vendor || '官方'}</span>
+        </div>
+        <div class="model-key-line">
+          <span>key: <b>${m.id}</b></span>
+          <span class="copy-key-btn" onclick="copyText('${m.id}')" title="点击复制模型 ID">📋 复制</span>
+          <span style="color:var(--border-color)">|</span>
+          <span style="font-size:11px;color:var(--text-muted)">CPA 路由: <code>cn/${m.id}</code> · <code>cb/${m.id}</code></span>
+        </div>
+        <div class="model-desc-text">${descText}</div>
+        <div class="model-accounts-line">
+          <span class="accounts-label">供给账号 (${accs.length}):</span>
+          ${accountChipsHTML}
+        </div>
+      </div>
+
+      <div class="model-pills-col">
+        ${rateHTML}
+        ${capsHTML.join(" ")}
+      </div>
+
+      <div class="model-specs-col">
+        <span class="context-spec-text">${specsText}</span>
+        <span class="badge-native">原生</span>
+        <button class="btn-secondary btn-sm" onclick="testModel('${m.id}')">${t("btn_test")}</button>
+      </div>
+    `;
+
+    container.appendChild(row);
+  });
 }
 
 async function reportBonus(id) {
